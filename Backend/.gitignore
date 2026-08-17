@@ -1,0 +1,42 @@
+# -----------------------------
+# 1. DEPENDENCIES (Heavy folders)
+# -----------------------------
+node_modules/
+
+# -----------------------------
+# 2. ENVIRONMENT VARIABLES (Security!)
+# -----------------------------
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+*.pem
+
+# -----------------------------
+# 3. BUILD OUTPUTS (React/Vite)
+# -----------------------------
+dist/
+dist-ssr/
+build/
+
+# -----------------------------
+# 4. LOG FILES
+# -----------------------------
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# -----------------------------
+# 5. OS GENERATED FILES
+# -----------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
