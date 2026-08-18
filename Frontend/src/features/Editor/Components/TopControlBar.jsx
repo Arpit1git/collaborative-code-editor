@@ -1,8 +1,8 @@
 import React, { useState }  from 'react'
-import {handleSaveFile,getFileById} from "../../Workspace/api/fileapi.js"
+import {handleSaveFile,getFileById,runFile} from "../../Workspace/api/fileapi.js"
 
 
-const TopControlBar= ({language,setLanguage,fileName,setfileName,editorRef}) => {
+const TopControlBar= ({language,setLanguage,fileName,setfileName,setOutput,editorRef}) => {
    
     const handleChangeValue  =(event)=>{
         setLanguage(event.target.value);
@@ -67,6 +67,27 @@ const TopControlBar= ({language,setLanguage,fileName,setfileName,editorRef}) => 
     }
 }
 
+  const handleRunFile = async()=>{
+       try {
+           let content ;
+
+           if(editorRef.current){
+            content = editorRef.current.getValue();
+           }
+
+           if(!content || !language){
+              throw new Error("code is requirde");
+           }
+
+           const res = await runFile(content,language);
+           
+            setOutput(res.output);
+
+       } catch (error) {
+          alert("Run Error :",error)
+       }
+  }
+
 
   return (
     <div className='flex flex-wrap gap-5 px-4'> 
@@ -107,6 +128,13 @@ const TopControlBar= ({language,setLanguage,fileName,setfileName,editorRef}) => 
          onClick={handleSearchFileById}
         >
           Search
+        </button>
+
+        <button
+         className="bg-green-600 text-white px-3 py-1 rounded"
+         onClick={handleRunFile}
+        >
+          Run
         </button>
 
     </div>

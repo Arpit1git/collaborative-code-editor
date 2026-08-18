@@ -58,3 +58,32 @@ export const getFileById = async(id)=>{
     }
 } 
 
+
+export const runFile = async(content,language)=>{
+      try {
+
+        if(!content || !language){
+            throw new Error("Contetn and Language Reuired");
+        }
+
+        const url  = `${import.meta.env.VITE_BACKEND_API}/file/compile`;
+
+        const res = await fetch(url,{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({content,language})
+        });
+
+        if(!res.ok){
+            throw new Error("Failed to Fetch .....");
+        }
+
+        const data = await res.json();
+
+        return data;
+        
+      } catch (error) {
+        console.log("Error from runFile :",error);
+         throw error
+      }
+}
