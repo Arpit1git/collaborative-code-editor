@@ -3,6 +3,7 @@ import dotenv from "dotenv"
 import cors from "cors"
 import connectDb from "./src/Config/Mongo_db.js"
 import  fileRouter from "./src/Routes/CRUD_Op_File_Routes/crudop_file_routes.js";
+import './src/Queue/codeWorker.js';
 
 dotenv.config();
 
