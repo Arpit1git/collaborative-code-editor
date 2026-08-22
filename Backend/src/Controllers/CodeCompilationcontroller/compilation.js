@@ -7,7 +7,7 @@ const queueEvents = new QueueEvents('code-execution-queue', { connection: redisC
 
 export const compileFile = async (req, res) => {
     try {
-        const { content, language } = req.body;
+        const { content, language,customInput = "" } = req.body;
 
         if (!content || !language) {
             return res.status(400).json({
@@ -23,7 +23,8 @@ export const compileFile = async (req, res) => {
         const job = await codeQueue.add('compile-job', {
             jobId,
             language,
-            content
+            content,
+            customInput
         });
 
         console.log(`[API] Job ${job.id} added to queue. Waiting for worker...`);
