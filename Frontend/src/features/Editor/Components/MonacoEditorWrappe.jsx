@@ -1,5 +1,5 @@
-import React, { useRef, useState } from 'react'
-import Editor, { DiffEditor, useMonaco, loader } from '@monaco-editor/react';
+
+import Editor from '@monaco-editor/react';
 
 
 const MonacoEditorWrappe = ({language,editorRef}) => {
@@ -12,11 +12,10 @@ const MonacoEditorWrappe = ({language,editorRef}) => {
  }   
  
  
- return <div >
-          <Editor height="90vh" theme="vs-dark" language={language} onMount={handleEditorChange}/>
+ return <div className='w-full h-full'>
+          <Editor height="100%" theme="vs-dark" language={language} onMount={handleEditorChange}/>
  </div>;
 
 }
 
 export default MonacoEditorWrappe
-
