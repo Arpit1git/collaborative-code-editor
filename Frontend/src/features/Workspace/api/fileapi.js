@@ -59,31 +59,60 @@ export const getFileById = async(id)=>{
 } 
 
 
-export const runFile = async(content,language)=>{
-      try {
+// export const runFile = async(content,language)=>{
+//       try {
 
-        if(!content || !language){
-            throw new Error("Contetn and Language Reuired");
+//         if(!content || !language){
+//             throw new Error("Contetn and Language Reuired");
+//         }
+
+//         const url  = `${import.meta.env.VITE_BACKEND_API}/file/compile`;
+
+//         const res = await fetch(url,{
+//             method:'POST',
+//             headers:{'Content-Type':'application/json'},
+//             body:JSON.stringify({content,language})
+//         });
+
+//         if(!res.ok){
+//             throw new Error("Failed to Fetch .....");
+//         }
+
+//         const data = await res.json();
+
+//         return data;
+        
+//       } catch (error) {
+//         console.log("Error from runFile :",error);
+//          throw error
+//       }
+// }
+
+export const runFile = async (content, language, customInput = "") => {
+      try {
+        if (!content || !language) {
+            throw new Error("Content and Language Required");
         }
 
         const url  = `${import.meta.env.VITE_BACKEND_API}/file/compile`;
 
-        const res = await fetch(url,{
-            method:'POST',
-            headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({content,language})
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            // Add customInput to the payload so your backend receives it!
+            body: JSON.stringify({ content, language, customInput })
         });
 
-        if(!res.ok){
+        if (!res.ok) {
             throw new Error("Failed to Fetch .....");
         }
 
         const data = await res.json();
 
         return data;
-        
+
       } catch (error) {
-        console.log("Error from runFile :",error);
-         throw error
+        console.log("Error from runFile :", error);
+         throw error;
       }
 }

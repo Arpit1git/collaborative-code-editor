@@ -1,8 +1,7 @@
-import React, { useState }  from 'react'
-import {handleSaveFile,getFileById,runFile} from "../../Workspace/api/fileapi.js"
+import { useState }  from 'react'
+import {handleSaveFile,getFileById} from "../../Workspace/api/fileapi.js"
 
-
-const TopControlBar= ({language,setLanguage,fileName,setfileName,setOutput,editorRef}) => {
+const TopControlBar= ({language,setLanguage,fileName,setfileName,editorRef, setIsWaitingForInput,handleRunFile}) => {
    
     const handleChangeValue  =(event)=>{
         setLanguage(event.target.value);
@@ -67,7 +66,14 @@ const TopControlBar= ({language,setLanguage,fileName,setfileName,setOutput,edito
     }
 }
 
-  const handleRunFile = async()=>{
+const inputKeywords = {
+    cpp: ["cin", "scanf"],
+    python: ["input(", "sys.stdin"],
+    java: ["Scanner", "System.in"],
+    javascript: ["readFileSync(0)", "readline"]
+};
+
+  const RunFile = async()=>{
        try {
            let content ;
 
@@ -79,9 +85,15 @@ const TopControlBar= ({language,setLanguage,fileName,setfileName,setOutput,edito
               throw new Error("code is requirde");
            }
 
-           const res = await runFile(content,language);
-           
-            setOutput(res.output);
+           const keyWord = inputKeywords[language]?.some((key)=>key.includes(content));
+
+           if(keyWord){
+            setIsWaitingForInput(true);
+             return ;
+           }
+
+          handleRunFile(content,language);
+
 
        } catch (error) {
           alert("Run Error :",error)
@@ -132,7 +144,7 @@ const TopControlBar= ({language,setLanguage,fileName,setfileName,setOutput,edito
 
         <button
          className="bg-green-600 text-white px-3 py-1 rounded"
-         onClick={handleRunFile}
+         onClick={RunFile}
         >
           Run
         </button>
