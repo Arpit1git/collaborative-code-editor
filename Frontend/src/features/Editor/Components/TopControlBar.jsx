@@ -85,18 +85,20 @@ const inputKeywords = {
               throw new Error("code is requirde");
            }
 
-           const keyWord = inputKeywords[language]?.some((key)=>key.includes(content));
+          const keyWord = inputKeywords[language]?.some((key) => content.includes(key));
 
-           if(keyWord){
-            setIsWaitingForInput(true);
-             return ;
+          if(keyWord){
+              setIsWaitingForInput(true);
+              return;
            }
 
-          handleRunFile(content,language);
+         // Ensure you wait for the hook to finish executing
+        await handleRunFile(content,language);
+
 
 
        } catch (error) {
-          alert("Run Error :",error)
+          alert("Run Error :"+error.message)
        }
   }
 

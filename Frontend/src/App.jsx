@@ -18,7 +18,7 @@ const App = () => {
         setOutput, 
         isWaitingForInput, 
         setIsWaitingForInput, 
-        handleRunFile } = useCodeExecution
+        handleRunFile } = useCodeExecution();
 
  return (
     <div className='h-screen flex flex-col bg-gray-900 overflow-hidden'>
