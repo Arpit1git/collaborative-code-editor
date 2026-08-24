@@ -1,38 +1,46 @@
-import React, { useEffect } from 'react'
+import { useEffect } from 'react';
 import * as Y from 'yjs';
-import { WebsocketProvider } from 'y-websocket'
-import { MonacoBinding } from 'y-monaco'
+import { HocuspocusProvider } from '@hocuspocus/provider'; // NEW IMPORT
+import { MonacoBinding } from 'y-monaco';
+
+const useCollabration = (editorRef, roomId, isReady) => {
+  useEffect(() => {
+    if (!isReady || !editorRef.current) return;
 
 
+    console.log("⚡ React is OPENING the connection!");
 
-const useCollabration = (editorRef, roomId,isReady) => {
+    const ydoc = new Y.Doc();
 
-    useEffect(() => {
-       
-     if(  !isReady|| !editorRef.current) return ;
-    
-    // this acts as the local mathematical brain that will calculate all the conflict-free merges.
-       const ydoc = new Y.Doc()  
-    //    Connect peers directly using WebRTC for the specific file/room
-       const provider = new WebsocketProvider(roomId, ydoc)
-    //    Define the shared text data structure
-       const type = ydoc.getText('monaco')
+    // The modern Hocuspocus connection
+  const provider = new HocuspocusProvider({
+         url: 'ws://localhost:8001', 
+         name: roomId, 
+         document: ydoc,
+    });
 
-    // 4. Bind the React editor reference to the Yjs document   
+  provider.on('disconnect', () => {
+        console.log("❌ The server dropped the connection!");
+    });
 
-      const monacoBinding = new MonacoBinding(
-            type,
-            editorRef.current.getModel(),
-            new Set([editorRef.current]),
-            provider.awareness
-        );
+    const type = ydoc.getText('monaco');
 
-      return () => {
-       monacoBinding.destroy();
-       provider.destroy();
-       ydoc.destroy();
-      };
-    }, [editorRef,roomId,isReady])
+    const monacoBinding = new MonacoBinding(
+      type,
+      editorRef.current.getModel(),
+      new Set([editorRef.current]),
+      provider.awareness
+    );
+
+    return () => {
+
+      console.log("🧹 React is DESTROYING the connection!");
+
+      monacoBinding.destroy();
+      provider.destroy();
+      ydoc.destroy();
+    };
+  }, [ roomId, isReady]);
 };
 
 export default useCollabration;
