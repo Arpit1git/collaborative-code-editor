@@ -18,6 +18,12 @@ const useCollabration = (editorRef, roomId, isReady) => {
          name: roomId, 
          document: ydoc,
     });
+   
+  provider.on('connect',()=>{
+     console.log("✅  provider has successfully connected to the serve");     
+  })  
+
+  
 
   provider.on('disconnect', () => {
         console.log("❌ The server dropped the connection!");

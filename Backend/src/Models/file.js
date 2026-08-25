@@ -13,6 +13,12 @@ const fileSchema = mongoose.Schema({
          default:""
        },
 
+       roomId:{
+         type:String,
+         required:true,
+         trim:true,
+       },
+
        language:{
          type:String,
          required:true,
