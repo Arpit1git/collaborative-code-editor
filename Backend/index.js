@@ -1,15 +1,21 @@
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
+import  cookieParser from 'cookie-parser'
+import jwt from 'jsonwebtoken';
 import http from 'http';
+
 import { Server as SocketIOServer } from "socket.io";
 import { Server } from '@hocuspocus/server';
 
 import { File } from "./src/Models/file.js";
 
+
 import connectDb from "./src/Config/Mongo_db.js";
 import fileRouter from "./src/Routes/CRUD_Op_File_Routes/crudop_file_routes.js";
+import authRouter from './src/Routes/Auth_Routes/authRoute.js';
 import './src/Queue/codeWorker.js';
+import { error } from "console";
 
 dotenv.config();
 
@@ -21,6 +27,10 @@ connectDb();
 
 app.use(cors({ origin: process.env.FRONTEND_API }));
 app.use(express.json());
+app.use(cookieParser())
+
+
+app.use("/api/auth",authRouter);
 app.use("/api/file", fileRouter);
 
 
@@ -43,8 +53,6 @@ const hocusServer = new Server({
             }
         }
     },
-
-    
 
     async onStoreDocument(data) {
         const rawCode = data.document.getText('monaco').toString();
@@ -72,6 +80,32 @@ const io = new SocketIOServer(server, {
     cors: { origin: process.env.FRONTEND_API, methods: ["GET", "POST"] }
 });
 
+io.use((socket,next)=>{
+   try {
+
+        const token = socket.handshake.auth.token;
+
+        if(!token || token.trim()==="")
+        {
+            return next(new Error("Unauthorized: No token provided"));
+        }
+
+        jwt.verify(token,process.env.Access_Key,(err,decodedPayload)=>{
+             
+        if(err)
+        {
+            return next(new Error("Forbidden: Invalid or expired token"));
+        }
+
+        socket.user = decodedPayload;
+        next();
+    })
+    
+   } catch (error) {
+        next(new Error("Unknown Server Error"));
+   }
+})
+
 io.on('connection', (socket) => {
     console.log(`[Socket] User connected: ${socket.id}`);
     socket.on('disconnect', () => {
@@ -83,3 +117,4 @@ io.on('connection', (socket) => {
 server.listen(PORT, () => {
     console.log(`Node JS server is running on http://localhost:${PORT}`);
 });
+
