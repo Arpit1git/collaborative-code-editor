@@ -1,14 +1,17 @@
 import { useState }  from 'react'
 import {handleSaveFile,getFileById} from "../../Workspace/api/fileapi.js"
+import { useAuth } from "../../auth/Context/AuthContext"
 
-const TopControlBar= ({language,setLanguage,fileName,setfileName,editorRef, setIsWaitingForInput,handleRunFile}) => {
+const TopControlBar= ({language,setLanguage,fileName,setFileName,editorRef, setIsWaitingForInput,handleRunFile}) => {
    
+    const { accessToken } = useAuth();
+
     const handleChangeValue  =(event)=>{
         setLanguage(event.target.value);
     }
 
     const handleFileNameChange = (event)=>{
-        setfileName(event.target.value);
+        setFileName(event.target.value);
     }
     
   
@@ -16,7 +19,7 @@ const TopControlBar= ({language,setLanguage,fileName,setfileName,editorRef, setI
        try {
 
         const content = editorRef.current.getValue();
-        const res = await  handleSaveFile(fileName,content,language,);
+        const res = await  handleSaveFile(fileName,content,language,accessToken);
 
         alert("Filed Saved Successfully");
         
@@ -40,21 +43,21 @@ const TopControlBar= ({language,setLanguage,fileName,setfileName,editorRef, setI
         }
 
         
-        const response = await getFileById(FileIdInput);
+        const response = await getFileById(FileIdInput, accessToken);
         
         
         const fetchedFile = response.file;
         
        
         setLanguage(fetchedFile.language);
-        setfileName(fetchedFile.fileName);
+        setFileName(fetchedFile.fileName);
         
         
        if (editorRef.current) {
             editorRef.current.setValue(fetchedFile.content);
             
             setTimeout(() => {
-                editorRef.current.getAction('editor.action.formatDocument').run();
+                editorRef.current?.getAction('editor.action.formatDocument')?.run();
             }, 100);
 
         }
@@ -82,7 +85,7 @@ const inputKeywords = {
            }
 
            if(!content || !language){
-              throw new Error("code is requirde");
+              throw new Error("code is required");
            }
 
           const keyWord = inputKeywords[language]?.some((key) => content.includes(key));
@@ -117,7 +120,7 @@ const inputKeywords = {
         <select   id="dropdown" value={language} onChange={handleChangeValue} >
             <option value="" disabled>--Select_Language--</option>
             <option value="cpp">C++</option>
-            <option value="python">Pyhton</option>
+            <option value="python">Python</option>
             <option value="java">Java</option>
             <option value="javascript">JavaScript</option>
         </select>

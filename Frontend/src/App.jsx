@@ -1,59 +1,34 @@
-import {useRef, useState} from 'react'
-import Split from 'react-split'
 
-import MonacoEditorWrappe from './features/Editor/Components/MonacoEditorWrappe.jsx'
-import TopControlBar from './features/Editor/Components/TopControlBar.jsx'
-import Terminal from './features/Editor/Components/Terminal.jsx'
-import useCodeExecution from './features/Execution/Hooks/useCodeExecution.js'
+import { Suspense, lazy } from "react";
+import { Routes, Route, Navigate } from "react-router-dom";
+import { useAuth } from "./features/auth/Context/AuthContext";
 
-const App = () => {
+const LoginPage = lazy(() => import("./features/auth/Components/Login.jsx").then(module => ({ default: module.LoginPage })));
+const SignupPage = lazy(() => import("./features/auth/Components/SignUp.jsx").then(module => ({ default: module.SignupPage })));
 
 
-  const [language, setlanguage] = useState("javascript")
-  const [fileName, setfileName] = useState("Enter FileNmae")
+const Editor = lazy(() => import("./features/Workspace/Editor.jsx").then(module => ({ default: module.Editor })));
 
-  const editorRef = useRef(null);
+export default function App() {
 
-  const {Output, 
-        setOutput, 
-        isWaitingForInput, 
-        setIsWaitingForInput, 
-        handleRunFile } = useCodeExecution();
+    const { isAuthenticated } = useAuth();
 
- return (
-    <div className='h-screen flex flex-col bg-gray-900 overflow-hidden'>
-
-      <TopControlBar language={language} setLanguage={setlanguage} fileName={fileName} setfileName={setfileName} setOutput={setOutput} editorRef={editorRef}  isWaitingForInput ={isWaitingForInput}  setIsWaitingForInput={setIsWaitingForInput} handleRunFile={handleRunFile} />
-      
-
-       
-       <Split
-        className='flex flex-row flex-1 w-full' 
-        sizes={[75, 25]} 
-        minSize={100}
-        expandToMin={false}
-        gutterSize={10}
-        gutterAlign="center"
-        snapOffset={30}
-        dragInterval={1}
-        direction="horizontal"
-        cursor="col-resize"
-       >
-        
-        
-        <div className='border-r border-gray-700 h-full'>
-          <MonacoEditorWrappe language={language} editorRef={editorRef} />
-        </div>
-       
-
-      
-        <div className='bg-black h-full'>
-          <Terminal Output={Output} isWaitingForInput={isWaitingForInput} setIsWaitingForInput={setIsWaitingForInput} handleRunFile={handleRunFile} editorRef={editorRef} language={language}/>
-        </div>
-        
-       </Split>
-    </div>
-  )
+    return (
+     
+        <Suspense fallback={<div className="h-screen flex items-center justify-center bg-gray-900 text-white">Loading Workspace...</div>}>
+            <Routes>
+               
+                <Route path="/" element={<Navigate to={isAuthenticated ? "/workspace" : "/login"} replace />} />
+                
+                {/* 5. Public Routes */}
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/signup" element={<SignupPage />} />
+              
+                <Route 
+                    path="/workspace" 
+                    element={isAuthenticated ? <Editor /> : <Navigate to="/login" replace />} 
+                />
+            </Routes>
+        </Suspense>
+    );
 }
-
-export default App

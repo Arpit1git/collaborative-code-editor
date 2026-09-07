@@ -31,7 +31,8 @@ export const CreateFile = async(req,res)=>{
         const create_file = await  File.create({
             fileName,
             content:content || "",
-            language
+            language,
+            roomId: req.body.roomId || `${fileName}_${Date.now()}`
         })
 
         console.log("sending msg to frontend from backend......");

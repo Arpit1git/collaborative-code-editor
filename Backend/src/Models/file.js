@@ -22,7 +22,7 @@ const fileSchema = mongoose.Schema({
        language:{
          type:String,
          required:true,
-         default:"javaString"
+         default:"javascript"
        },
 
       

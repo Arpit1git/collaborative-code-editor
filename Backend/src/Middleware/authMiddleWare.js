@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 
 export const authMiddleware = async (req,res,next)=>{
+    
       try {
 
         const authHeader =  req.headers.authorization ||  req.headers.Authorization;
@@ -17,7 +18,7 @@ export const authMiddleware = async (req,res,next)=>{
          jwt.verify(token,process.env.Access_Key,(err,decodedPayload)=>{
                
             if(err){
-                return res.status(403).json({ success: false, message: "Forbidden: Invalid or expired token" });
+                return res.status(401).json({ success: false, message: "Forbidden: Invalid or expired token" });
             }
 
             req.user = decodedPayload;

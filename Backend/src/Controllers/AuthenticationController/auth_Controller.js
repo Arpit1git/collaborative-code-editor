@@ -16,7 +16,7 @@ export const userSignUp = async (req,res)=>{
     try {
         const {userName,email,password} =  req.body;
 
-        if( !userName ||userName.trim()==="" || email.trim()==="" ||!email || !password || !password.trim()===""){
+        if( !userName?.trim() || !email?.trim() || !password?.trim()){
               
             return res.status(400).json({
                  success:false,
@@ -24,7 +24,7 @@ export const userSignUp = async (req,res)=>{
             })
         }
 
-        const findUser = await User.findOne({userName:userName,email:email});
+        const findUser = await User.findOne({ $or: [{ userName }, { email }] });
 
         if(findUser){
              return res.status(400).json({
@@ -75,13 +75,12 @@ export const loginUser = async(req,res)=>{
 
          const {email,password} =  req.body;
 
-        if(!email ||email.trim()===""|| !password || !password.trim()===""){
-            
-            return res.status(400).json({
-                 success:false,
-                 message:"All credential Required );",
-            })
-        }
+        if (!email || email.trim() === "" || !password || password.trim() === "") {
+        return res.status(400).json({
+        success: false,
+        message: "All credentials required",
+      });
+}
 
         const serachUser = await User.findOne({"email":email});
 
@@ -132,9 +131,6 @@ export const refreshToken = async(req,res)=>{
 
          const currentRefreshToken = req.cookies.refreshToken;
 
-        
-         
-
         if (!currentRefreshToken) {
             return res.status(401).json({ 
                 success: false, 
@@ -145,13 +141,8 @@ export const refreshToken = async(req,res)=>{
        let decodedPayload;
 
        try {
-
-            
-
             decodedPayload = jwt.verify(currentRefreshToken, process.env.Refresh_Key);
             
-        
-              
        } catch (error) {
            console.log("JWT VERIFY ERROR:", error.message);
            
@@ -223,7 +214,7 @@ export const logout = async(req,res)=>{
              })
         }
 
-        searchUser.refreshToken="";
+        searchUser.refreshToken=null;
         await searchUser.save();
 
         const cookieOptions = {
@@ -246,3 +237,33 @@ export const logout = async(req,res)=>{
          })
      }
 } 
+
+/**
+ * @name getMe
+ * @description
+ */
+
+export const getMe =  async(req,res)=>{
+      try {
+
+        const user = await User.findById(req.user.userId).select("-password -refreshToken");
+
+        if(!user)
+        {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+
+        return res.status(200).json({
+             success:true,
+             user:{
+                 _id:user._id,
+                 userName:user.userName,
+                 email:user.email,
+             }
+        });
+        
+      } catch (error)
+      {
+              return res.status(500).json({ success: false, message: "Server Error" });
+      }
+}

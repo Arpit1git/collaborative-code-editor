@@ -1,118 +1,88 @@
+// Helper to construct request headers with JWT token if available
+const getHeaders = (token) => {
+    const activeToken = token || localStorage.getItem("accessToken");
+    return {
+        "Content-Type": "application/json",
+        ...(activeToken && { Authorization: `Bearer ${activeToken}` }),
+    };
+};
 
-export const handleSaveFile = async (fileName,content,language)=>{
-         
-        try {
-
-            if(!fileName || !content || !language){
-                throw new Error("Missing required fields for saving.");   
-            }
-
-            const payload ={fileName:fileName,content:content,language:language};
-
-            console.log("Payload :",payload);
-            
-            const url = `${import.meta.env.VITE_BACKEND_API}/file/create`;
-            console.log("URL :",url);
-            
-            const res = await fetch(url,{
-                method:"POST",
-                headers:{"Content-Type":"application/json"},
-                body:JSON.stringify(payload)
-            })
-            
-            console.log("res :",res);
-        
-            const data = await res.json();
-            console.log("data :",data);
-            
-            return data;
-            
-        } catch (error) {
-            console.error("Error while saving....");
-            throw error
-        }
-}
-
-export const getFileById = async(id)=>{
+export const handleSaveFile = async (fileName, content, language, token = null) => {
     try {
-        
-        const url = `${import.meta.env.VITE_BACKEND_API}/file/${id}`
-
-        const res = await fetch(url,{
-            method:"GET",
-            headers:{"Content-Type":"application/json"}
-        })
-
-        if(!res.ok){
-            throw new Error("Erro while searching file...")
+        if (!fileName || !content || !language) {
+            throw new Error("Missing required fields for saving.");
         }
+
+        const payload = { fileName, content, language };
+        const url = `${import.meta.env.VITE_BACKEND_API}/file/create`;
+
+        const res = await fetch(url, {
+            method: "POST",
+            headers: getHeaders(token),
+            credentials: "include",
+            body: JSON.stringify(payload),
+        });
 
         const data = await res.json();
+
+        if (!res.ok) {
+            throw new Error(data.message || "Failed to save file");
+        }
+
         return data;
-        
     } catch (error) {
-
-        console.error("Error from getFileById",error);
+        console.error("Error while saving:", error);
         throw error;
-
     }
-} 
+};
 
+export const getFileById = async (id, token = null) => {
+    try {
+        const url = `${import.meta.env.VITE_BACKEND_API}/file/${id}`;
 
-// export const runFile = async(content,language)=>{
-//       try {
+        const res = await fetch(url, {
+            method: "GET",
+            headers: getHeaders(token),
+            credentials: "include",
+        });
 
-//         if(!content || !language){
-//             throw new Error("Contetn and Language Reuired");
-//         }
+        const data = await res.json();
 
-//         const url  = `${import.meta.env.VITE_BACKEND_API}/file/compile`;
+        if (!res.ok) {
+            throw new Error(data.message || "Error while searching file");
+        }
 
-//         const res = await fetch(url,{
-//             method:'POST',
-//             headers:{'Content-Type':'application/json'},
-//             body:JSON.stringify({content,language})
-//         });
+        return data;
+    } catch (error) {
+        console.error("Error from getFileById:", error);
+        throw error;
+    }
+};
 
-//         if(!res.ok){
-//             throw new Error("Failed to Fetch .....");
-//         }
-
-//         const data = await res.json();
-
-//         return data;
-        
-//       } catch (error) {
-//         console.log("Error from runFile :",error);
-//          throw error
-//       }
-// }
-
-export const runFile = async (content, language, customInput = "") => {
-      try {
+export const runFile = async (content, language, customInput = "", token = null) => {
+    try {
         if (!content || !language) {
             throw new Error("Content and Language Required");
         }
 
-        const url  = `${import.meta.env.VITE_BACKEND_API}/file/compile`;
+        const url = `${import.meta.env.VITE_BACKEND_API}/file/compile`;
 
         const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            // Add customInput to the payload so your backend receives it!
-            body: JSON.stringify({ content, language, customInput })
+            method: "POST",
+            headers: getHeaders(token),
+            credentials: "include",
+            body: JSON.stringify({ content, language, customInput }),
         });
-
-        if (!res.ok) {
-            throw new Error("Failed to Fetch .....");
-        }
 
         const data = await res.json();
 
-        return data;
+        if (!res.ok) {
+            throw new Error(data.message || "Failed to execute code");
+        }
 
-      } catch (error) {
-        console.log("Error from runFile :", error);
-         throw error;
-      }
-}
+        return data;
+    } catch (error) {
+        console.error("Error from runFile:", error);
+        throw error;
+    }
+};

@@ -3,12 +3,12 @@ import Editor from '@monaco-editor/react';
 import useCollabration from '../Hooks/useCollabration.js'
 import { useState } from 'react';
 
-const MonacoEditorWrappe = ({language,editorRef}) => {
+const MonacoEditorWrappe = ({language,editorRef,roomId}) => {
       
 
       const [isReady, setIsReady] = useState(false)
       
-      useCollabration(editorRef,"test_id",isReady);
+      useCollabration(editorRef,"default_room", isReady);
 
     // This runs once when Monaco loads
     
