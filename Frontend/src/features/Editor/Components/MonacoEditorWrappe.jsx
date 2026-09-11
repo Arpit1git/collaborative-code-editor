@@ -8,7 +8,7 @@ const MonacoEditorWrappe = ({language,editorRef,roomId}) => {
 
       const [isReady, setIsReady] = useState(false)
       
-      useCollabration(editorRef,"default_room", isReady);
+      useCollabration(editorRef, roomId || "default_room", isReady);
 
     // This runs once when Monaco loads
     

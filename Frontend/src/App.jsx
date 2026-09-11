@@ -8,6 +8,7 @@ const SignupPage = lazy(() => import("./features/auth/Components/SignUp.jsx").th
 
 
 const Editor = lazy(() => import("./features/Workspace/Editor.jsx").then(module => ({ default: module.Editor })));
+const Ide = lazy(() => import("./dashboard/ide.jsx"));
 
 export default function App() {
 
@@ -18,15 +19,20 @@ export default function App() {
         <Suspense fallback={<div className="h-screen flex items-center justify-center bg-gray-900 text-white">Loading Workspace...</div>}>
             <Routes>
                
-                <Route path="/" element={<Navigate to={isAuthenticated ? "/workspace" : "/login"} replace />} />
+                <Route path="/" element={<Navigate to={isAuthenticated ? "/ide" : "/login"} replace />} />
                 
-                {/* 5. Public Routes */}
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/signup" element={<SignupPage />} />
               
                 <Route 
                     path="/workspace" 
                     element={isAuthenticated ? <Editor /> : <Navigate to="/login" replace />} 
+                />
+
+             
+                <Route 
+                    path="/ide" 
+                    element={isAuthenticated ? <Ide /> : <Navigate to="/login" replace />} 
                 />
             </Routes>
         </Suspense>

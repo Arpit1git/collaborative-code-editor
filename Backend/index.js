@@ -8,6 +8,7 @@ import http from 'http';
 import { Server as SocketIOServer } from "socket.io";
 import { Hocuspocus } from '@hocuspocus/server';
 import { WebSocketServer } from "ws"; 
+import mongoose from "mongoose";
 import { File } from "./src/Models/file.js";
 
 
@@ -41,7 +42,7 @@ const hocuspocus = new Hocuspocus({
     // port: 8001
        
    
-    extensions: [new Logger()],
+    // extensions: [new Logger()],
 
     
 
@@ -65,36 +66,50 @@ const hocuspocus = new Hocuspocus({
     },
 
     async onLoadDocument(data) {
-        // Search MongoDB for the file matching the roomId (documentName)
-        const file = await File.findOne({ roomId: data.documentName });
-        console.log(`[Hocuspocus] Loading document for room: ${data.documentName}`);
-        
-        // If the file exists and has saved code, inject it into the editor
-        if (file && file.content) {
-            const yText = data.document.getText('monaco');
+        try {
+            console.log(`[Hocuspocus] Loading document for room: ${data.documentName}`);
+            const isObjectId = mongoose.Types.ObjectId.isValid(data.documentName);
+            const query = isObjectId ? { _id: data.documentName } : { roomId: data.documentName };
+            const file = await File.findOne(query);
             
-            // Only inject if the Yjs document is currently empty
-            if (yText.length === 0) {
-                console.log(`[Hocuspocus] Injecting existing code into editor...`);
-                yText.insert(0, file.content);
+            // If the file exists and has saved code, inject it into the editor
+            if (file && file.content) {
+                const yText = data.document.getText('monaco');
+                
+                // Only inject if the Yjs document is currently empty
+                if (yText.length === 0) {
+                    console.log(`[Hocuspocus] Injecting existing code for "${file.name}" into editor...`);
+                    yText.insert(0, file.content);
+                }
             }
+        } catch (err) {
+            console.error(`[Hocuspocus ERROR] Error in onLoadDocument:`, err.message);
         }
     },
 
     async onStoreDocument(data) {
-        const rawCode = data.document.getText('monaco').toString();
-        console.log(`[DB SAVE] File ${data.documentName} updated!`);
-        console.log(`Code Content:\n${rawCode}`);
+        try {
+            const rawCode = data.document.getText('monaco').toString();
+            console.log(`[DB SAVE] File ${data.documentName} updated!`);
+            console.log(`Code Content:\n${rawCode}`);
 
-        await File.findOneAndUpdate(
-            { roomId: data.documentName }, 
-            { $set: { content: rawCode } },
-            { upsert: true } // If the file somehow doesn't exist, create it
-        );
+            const isObjectId = mongoose.Types.ObjectId.isValid(data.documentName);
+            const query = isObjectId ? { _id: data.documentName } : { roomId: data.documentName };
 
+            const updated = await File.findOneAndUpdate(
+                query, 
+                { $set: { content: rawCode } },
+                { returnDocument: 'after' }
+            );
 
-        console.log(`[DB] Successfully saved Room: ${data.documentName} to MongoDB!`);
-
+            if (updated) {
+                console.log(`[DB] Successfully saved "${updated.name}" (${data.documentName}) to MongoDB!`);
+            } else {
+                console.log(`[DB] Document ${data.documentName} not found in DB (nothing to update).`);
+            }
+        } catch (err) {
+            console.error(`[DB ERROR] Failed to save document ${data.documentName}:`, err.message);
+        }
     }
 });
 
@@ -197,6 +212,8 @@ hocuspocusWSS.on('connection', (ws, request) => {
     // 3. YOU must manually listen for messages and hand them to Hocuspocus
     ws.on('message', (data) => {
         clientConnection.handleMessage(data);
+  
+        
     });
     
     // 4. YOU must manually tell Hocuspocus when it closes

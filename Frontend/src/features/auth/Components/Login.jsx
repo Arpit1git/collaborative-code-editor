@@ -19,7 +19,7 @@ export function LoginPage() {
 
         try {
             await login(email, password);
-            navigate("/workspace", { replace: true });
+            navigate("/ide", { replace: true });
         } catch (err) {
             setError(err.message);
         } finally {

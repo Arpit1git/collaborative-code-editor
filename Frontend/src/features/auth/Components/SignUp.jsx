@@ -20,7 +20,7 @@ export function SignupPage() {
 
         try {
             await signup(userName, email, password);
-            navigate("/workspace", { replace: true });
+            navigate("/ide", { replace: true });
         } catch (err) {
             setError(err.message);
         } finally {

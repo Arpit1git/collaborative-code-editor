@@ -23,9 +23,10 @@ const TopControlBar= ({language,setLanguage,fileName,setFileName,editorRef, setI
 
         alert("Filed Saved Successfully");
         
-       } catch (error) {
+       } catch (error)
+        {
            alert("Failed to save: " + error.message);
-       }
+        }
     }
 
     const [FileIdInput, setFileIdInput] = useState("");

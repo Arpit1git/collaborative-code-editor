@@ -2,49 +2,173 @@ import {File} from '../../Models/file.js'
 
 
 /** 
- * @name:CreateFile
- * @decription: using this router user can create file
- * @acess:public
+* @name: GetRootFileOrFolder
+ * @description: Fetches all files and folders at the root level (no parent directory) for the logged-in user.
+ * @access: private
    */
 
-export const CreateFile = async(req,res)=>{
+ 
+export const GetRootFileOrFolder = async (req,res)=>{
+        try {
+
+             const {userId} = req.user;
+
+            const searchRootFileAndFolder = await File.find({ owner: userId, parentId: null });
+
+
+             return res.status(200).json({
+                success:true,
+                message:"file fetch Successfully...",
+                data:searchRootFileAndFolder
+             })
+
+        } catch (error) {
+            console.error("Error while fetching file...",error.message);
+            return res.status(500).json({
+                success:false,
+                message:"Unkown Internal Serve Error"
+            })
+        }
+}
+
+/** 
+* @name: GetFilesInsideFolder
+ * @description: Fetches all files and folders contained within a specific parent folder.
+ * @access: private
+   */
+
+export const GetFilesInsideFolder = async (req,res)=>{
+      try {
+
+         const {userId} = req.user;
+         const {parentId} = req.params;
+
+
+         if (!parentId) {
+            return res.status(400).json({ success: false, message: "Parent ID is required" });
+        }
+
+
+         const searchFile = await File.find({
+                  parentId:parentId,
+                  owner:userId
+         });
+
+          
+         return res.status(200).json({
+              success:true,
+              message:"Successfully Fetch Filed",
+              data:searchFile
+         })
+        
+      } catch (error) {
+
+           console.error("Error while fetching file fromFolder...",error.message);
+
+           return res.status(500).json({
+                success:false,
+                message:"Unkown Internal Serve Error"
+            })
+           
+      }
+}
+
+
+/** 
+ * @name:CreateFileOrFolder
+ * @decription: using this router user can create file
+ * @acess:private
+   */
+
+export const CreateFileOrFolder = async(req,res)=>{
        try { 
 
-        const {fileName,content,language} = req.body;
+           const {isFolder,name,parentId="",language=""} = req.body;
+           const {userId} = req.user;
 
-        if(!fileName || !language){
-             return res.status(400).json({
-                success:false,
-                message:"fileName and language is required"
-             })
+           if(!name){
+               return res.status(400).json({
+                 success:false,
+                 message:"name is required"
+               })
+           }
+
+           const seachfileorFolderNmae = await File.findOne(
+            {
+                name:name,
+                parentId:parentId||null,
+                owner:userId
+            }
+        );
+
+           
+
+           if(seachfileorFolderNmae){
+                 return res.status(400).json({
+                    success:false,
+                    message:"File or Folder exist by this name"
+                 })
+           }
+
+           // 3. Ensure the parent is actually a folder (if parentId is provided)
+         if (parentId) {
+            const parentNode = await File.findOne({ _id: parentId, owner: userId });
+            if (!parentNode) {
+                return res.status(404).json({ success: false, message: "Parent directory not found." });
+            }
+            if (!parentNode.isFolder) {
+                return res.status(400).json({ success: false, message: "Cannot place an item inside a file." });
+            }
         }
 
-        const checkFileExist = await File.findOne({fileName});
+          
+           
+           if(isFolder){
+              
+             const folder=   await File.create({
+                     name:name,
+                     isFolder:true,
+                     owner:userId,
+                     parentId:parentId || null
+                })
 
-        if(checkFileExist){
-             return res.status(400).json({
-                success:false,
-                message:"already a file exist by same name",
-             })
-        }
+                return res.status(201).json({
+                    success:true,
+                    message:"Folder Created Successfully",
+                    data:folder
+                })
+             
+           }
 
-        const create_file = await  File.create({
-            fileName,
-            content:content || "",
-            language,
-            roomId: req.body.roomId || `${fileName}_${Date.now()}`
-        })
+          
 
-        console.log("sending msg to frontend from backend......");
-        
 
-        return res.status(200).json({
+           const createFile  = await File.create({
+                    
+                  name:name,
+                  isFolder:false,
+                  owner:userId,
+                  parentId:parentId || null,
+                  language: language || "javascript"
+           })
+
+
+          return res.status(201).json({
             success: true,
-            message: `File ${fileName} is created`,
-            fileId: create_file._id
-        })
+            message: "File Created Successfully",
+            data: createFile
+        });
+
         
        } catch (error) {
+
+          if(error.code==11000)
+          {
+             return res.status(409).json({
+                success:false,
+                message:"A file or folder with this name already exists in this location."
+             })
+          }
           console.error("Error: while creating file from GenrateFileController/create_file.js\n",error.message);
           res.status(500).json({ success: false, message: "Server Error" });
        }
@@ -190,4 +314,3 @@ export const SearchFile = async(req,res)=>{
 //         return res.status(500).json({ success: false, message: "Internal Server Error" });
 //     }
 // }
-

@@ -1,33 +1,39 @@
-import mongoose  from "mongoose";
-//  we have to implement a unique file feature for paricular user
-const fileSchema = mongoose.Schema({
-           
-       fileName:{
-        type:String,
-        required:true,
-        trim:true,
-       },
+import mongoose from "mongoose";
 
-       content:{
-         type:String,
-         default:""
-       },
+const fileSchema = new mongoose.Schema(
+    {
+        name: {
+            type: String,
+            required: true,
+            trim: true
+        },
+        isFolder: {
+            type: Boolean,
+            default: false,
+            required: true
+        },
+        parentId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "File",
+            default: null 
+        },
+        owner: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User", 
+            required: true
+        },
+        content: {
+            type: String,
+            default: ""
+        },
+        language: {
+            type: String,
+            default: "" 
+        },
+        
 
-       roomId:{
-         type:String,
-         required:true,
-         trim:true,
-       },
-
-       language:{
-         type:String,
-         required:true,
-         default:"javascript"
-       },
-
-      
-
-
-}, { timestamps: true });
-
-export const File = new mongoose.model("File",fileSchema);
+    },
+    { timestamps: true }
+);
+fileSchema.index({owner:1,parentId:1,name:1},{unique:true});
+export const File = mongoose.model("File", fileSchema);
