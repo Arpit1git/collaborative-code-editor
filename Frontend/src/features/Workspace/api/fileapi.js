@@ -146,6 +146,7 @@ export const getRootFilesAndFolders = async (token = null) => {
         const url = `${import.meta.env.VITE_BACKEND_API}/file/root`;
         const res = await authFetch(url, { method: "GET" }, token);
         const data = await res.json();
+        
         if (!res.ok) {
             throw new Error(data.message || "Failed to fetch root items");
         }

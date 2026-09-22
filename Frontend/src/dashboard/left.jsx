@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Folder, 
   FolderOpen, 
@@ -222,6 +222,7 @@ export const FileItem = ({ item, depth = 0, onSelectFile, isActive = false }) =>
   >
     <FileCode size={13} className="text-yellow-400 shrink-0" />
     <span className="truncate">{item.name}</span>
+
   </div>
 );
 
@@ -434,7 +435,7 @@ export const Left = ({ onSelectFile, activeFileId, triggerRootCreate, setTrigger
                 onToggleFolder={handleToggleFolder}
                 onCreateItem={handleCreateItem}
                 onSelectFile={onSelectFile}
-                activeFileId={activeFileId}
+                activeFileId={activeFileId}                     
               />
             ) : (
               <FileItem 

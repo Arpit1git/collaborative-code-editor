@@ -1,17 +1,20 @@
-import React, { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { Group, Panel, Separator } from 'react-resizable-panels';
+
 import { 
   PanelLeft, 
   Terminal as TerminalIcon, 
   Sparkles, 
   MessageSquare,
   Code2,
-  Play
+  Play,
+  Square
 } from 'lucide-react';
+
 import Left from './left.jsx';
 import Central from './central.jsx';
 import Right from './right.jsx';
-import useCodeExecution from '../features/Execution/Hooks/useCodeExecution.js';
+import { socket } from '../Config/socketClient.js';
 
 export const Ide = () => {
   const editorRef = useRef(null);
@@ -22,76 +25,107 @@ export const Ide = () => {
   // Right div view state ('terminal' | 'gemini' | 'chat' | null)
   const [rightView, setRightView] = useState(null);
 
-  // Tab and active file state (starts completely empty, NO dummy data)
+  // Tab and active file state (starts completely empty)
   const [openTabs, setOpenTabs] = useState([]);
   const [activeFile, setActiveFile] = useState(null);
 
   // Trigger file creation from the central empty state
   const [triggerRootCreate, setTriggerRootCreate] = useState(false);
 
-  // Code Execution State & Hook
-  const { 
-    Output, 
-    setOutput, 
-    isWaitingForInput, 
-    setIsWaitingForInput, 
-    handleRunFile 
-  } = useCodeExecution();
-
+  // Execution state synchronized with backend Docker container across the room
   const [isRunning, setIsRunning] = useState(false);
 
-  const inputKeywords = {
-    cpp: ["cin", "scanf"],
-    python: ["input(", "sys.stdin"],
-    java: ["Scanner", "System.in"],
-    javascript: ["readFileSync(0)", "readline"]
-  };
+  const currentRoomId = activeFile?._id;
 
-  // Run Code logic: inspects editor code and triggers Docker execution
-  const handleRunCode = async () => {
+  // Listen to Docker container lifecycle events for this room
+  useEffect(() => {
+    const token = localStorage.getItem('accessToken');
+    
+    if (token) {
+      socket.auth = { token };
+    }
+
+    if (!socket.connected) {
+      socket.connect();
+    }
+
+    // If socket is already connected and we have a room, join immediately
+    if (socket.connected && currentRoomId) {
+      socket.emit('room:join', { roomId: currentRoomId });
+    }
+
+    const handleConnect = () => {
+      console.log(`[Socket] Connected to backend: ${socket.id}`);
+      if (currentRoomId) {
+        socket.emit('room:join', { roomId: currentRoomId });
+      }
+    };
+
+    const handleConnectError = (err) => {
+      console.error(`[Socket] Connection error:`, err.message);
+    };
+
+    const handleStatus = ({ isRunning: running }) => {
+      setIsRunning(Boolean(running));
+    };
+
+    const handleError = (errMsg) => {
+      setIsRunning(false);
+      console.error('Terminal error:', errMsg);
+    };
+
+    socket.on('connect', handleConnect);
+    socket.on('connect_error', handleConnectError);
+    socket.on('terminal:status', handleStatus);
+    socket.on('terminal:error', handleError);
+
+    return () => {
+      socket.off('connect', handleConnect);
+      socket.off('connect_error', handleConnectError);
+      socket.off('terminal:status', handleStatus);
+      socket.off('terminal:error', handleError);
+    };
+  }, [currentRoomId]);
+
+  // Synchronized Run / Stop Button handler
+  const handleRunOrStop = () => {
     if (!activeFile) return;
 
-    const content = editorRef.current ? editorRef.current.getValue() : "";
-    const language = activeFile.language || "javascript";
+    // If container is already executing, clicking Stop sends terminal:stop immediately
+    if (isRunning) {
+      socket.emit('terminal:stop', { roomId: currentRoomId });
+      setIsRunning(false);
+      return;
+    }
+
+    const content = editorRef.current ? editorRef.current.getValue() : '';
+    const language = activeFile.language || 'javascript';
 
     if (!content.trim()) {
-      setOutput("Please enter some code before running.");
       setRightView('terminal');
       return;
     }
 
+    // Automatically reveal terminal so the user sees live output
     setRightView('terminal');
 
-    const requiresInput = inputKeywords[language]?.some((key) => content.includes(key));
-    if (requiresInput) {
-      setIsWaitingForInput(true);
-      return;
+    const token = localStorage.getItem('accessToken');
+    if (token) {
+      socket.auth = { token };
     }
 
-    setIsWaitingForInput(false);
-    setIsRunning(true);
-    try {
-      await handleRunFile(content, language);
-    } finally {
-      setIsRunning(false);
+    if (!socket.connected) {
+      socket.connect();
     }
+
+    // Emit terminal:run with roomId, language, and editor code
+    socket.emit('terminal:run', {
+      roomId: currentRoomId,
+      language,
+      content
+    });
   };
 
-  // Interactive stdin input submission
-  const handleSubmitCustomInput = async (inputText) => {
-    if (!activeFile) return;
-
-    const content = editorRef.current ? editorRef.current.getValue() : "";
-    const language = activeFile.language || "javascript";
-
-    setIsWaitingForInput(false);
-    setIsRunning(true);
-    try {
-      await handleRunFile(content, language, inputText);
-    } finally {
-      setIsRunning(false);
-    }
-  };
 
   // Toggle Left Div
   const toggleLeftDiv = () => {
@@ -159,17 +193,29 @@ export const Ide = () => {
 
         {/* Right corner: Run Button + Three options (Terminal, Gemini, Chat) */}
         <div className="flex items-center gap-2">
-          {/* Run Button (when a file is open) */}
+          {/* Run / Stop Button (when a file is open) */}
           {activeFile && (
             <button
               type="button"
-              onClick={handleRunCode}
-              disabled={isRunning}
-              className="flex items-center gap-1.5 px-3 py-1 rounded text-xs font-semibold bg-linear-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white shadow-xs transition active:scale-95 disabled:opacity-50"
-              title="Run Code in Docker Sandbox"
+              onClick={handleRunOrStop}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-semibold shadow-xs transition active:scale-95 cursor-pointer ${
+                isRunning
+                  ? 'bg-linear-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white'
+                  : 'bg-linear-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white'
+              }`}
+              title={isRunning ? "Stop Execution (Kill Docker Sandbox)" : "Run Code in Docker Sandbox"}
             >
-              <Play size={12} className="fill-current" />
-              <span>{isRunning ? 'Running...' : 'Run'}</span>
+              {isRunning ? (
+                <>
+                  <Square size={12} className="fill-current" />
+                  <span>Stop</span>
+                </>
+              ) : (
+                <>
+                  <Play size={12} className="fill-current" />
+                  <span>Run</span>
+                </>
+              )}
             </button>
           )}
 
@@ -223,7 +269,6 @@ export const Ide = () => {
       {/* 2. Adjustable Main Body: Left Div, Central Div, Right Div */}
       <div className="flex-1 w-full h-full overflow-hidden relative">
         <Group 
-          key={`${isLeftOpen ? 'left-open' : 'left-closed'}-${rightView ? rightView : 'no-right'}`}
           orientation="horizontal" 
           id="ide-main-group"
           style={{ height: '100%', width: '100%' }}
@@ -257,7 +302,7 @@ export const Ide = () => {
 
           {/* Central Div (Code Editor & Tab Manager or Empty State) */}
           <Panel 
-            defaultSize="55%"
+            defaultSize="55%" 
             minSize="30%" 
             id="ide-central-panel"
             className="h-full overflow-hidden"
@@ -276,7 +321,7 @@ export const Ide = () => {
                 if (!isLeftOpen) setIsLeftOpen(true);
                 setTriggerRootCreate({ isFolder: true });
               }}
-              onRunCode={handleRunCode}
+              onRunCode={handleRunOrStop}
               isRunning={isRunning}
             />
           </Panel>
@@ -300,13 +345,10 @@ export const Ide = () => {
               className="h-full overflow-hidden"
             >
               <Right 
+                roomId={currentRoomId}
                 activeView={rightView} 
                 onClose={() => setRightView(null)} 
-                terminalOutput={Output}
-                onClearTerminal={() => setOutput("")}
-                isWaitingForInput={isWaitingForInput}
-                onSubmitCustomInput={handleSubmitCustomInput}
-                onRunCode={handleRunCode}
+                onRunCode={handleRunOrStop}
                 isRunning={isRunning}
                 activeFile={activeFile}
               />

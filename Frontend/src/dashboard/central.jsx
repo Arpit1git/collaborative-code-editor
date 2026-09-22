@@ -1,6 +1,6 @@
-import React from 'react';
+
 import MonacoEditorWrappe from '../features/Editor/Components/MonacoEditorWrappe.jsx';
-import { FileCode, X, Code2, FilePlus, FolderPlus, Folder, Play } from 'lucide-react';
+import { FileCode, X, Code2, FilePlus, FolderPlus, Folder } from 'lucide-react';
 
 export const Central = ({ 
   editorRef, 
@@ -17,7 +17,7 @@ export const Central = ({
   if (!activeFile) {
     return (
       <div className="flex flex-col items-center justify-center h-full w-full bg-[#0d0918] text-center p-6 select-none">
-        <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-purple-900/40 to-indigo-900/40 border border-purple-500/20 flex items-center justify-center text-purple-400 mb-4 shadow-lg">
+        <div className="w-16 h-16 rounded-2xl bg-linear-to-tr from-purple-900/40 to-indigo-900/40 border border-purple-500/20 flex items-center justify-center text-purple-400 mb-4 shadow-lg">
           <Code2 size={32} />
         </div>
 
@@ -35,7 +35,7 @@ export const Central = ({
             <button
               type="button"
               onClick={onStartCreateFile}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-lg text-xs font-semibold shadow-md transition transform active:scale-95"
+              className="flex items-center gap-2 px-4 py-2 bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-lg text-xs font-semibold shadow-md transition transform active:scale-95"
             >
               <FilePlus size={15} />
               <span>Create New File</span>
@@ -88,10 +88,10 @@ export const Central = ({
                 }`}
               >
                 {isActive && (
-                  <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-purple-500 to-indigo-500" />
+                  <div className="absolute top-0 left-0 right-0 h-0.5 bg-linear-to-r from-purple-500 to-indigo-500" />
                 )}
                 <FileCode size={13} className={isActive ? 'text-yellow-400' : 'text-[#8e85a6]'} />
-                <span className="truncate max-w-[130px]">{tab.name}</span>
+                <span className="truncate max-w-32.5">{tab.name}</span>
                 <button
                   type="button"
                   onClick={(e) => {
@@ -110,19 +110,6 @@ export const Central = ({
 
         {/* Actions & Language Badge on right */}
         <div className="flex items-center gap-2 px-3 shrink-0">
-          {onRunCode && (
-            <button
-              type="button"
-              onClick={onRunCode}
-              disabled={isRunning}
-              className="flex items-center gap-1.5 px-2.5 py-1 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white rounded text-xs font-semibold shadow-xs transition active:scale-95 disabled:opacity-50"
-              title="Run Code (Docker Sandbox)"
-            >
-              <Play size={11} className="fill-current" />
-              <span>{isRunning ? 'Running...' : 'Run'}</span>
-            </button>
-          )}
-
           <span className="text-[10px] uppercase font-mono tracking-wider text-[#9d92b8] bg-[#22163f] px-2 py-0.5 rounded border border-[#2d1e52]">
             {activeFile.language || 'javascript'}
           </span>

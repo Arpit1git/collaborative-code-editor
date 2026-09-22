@@ -11,11 +11,16 @@ import {File} from '../../Models/file.js'
 export const GetRootFileOrFolder = async (req,res)=>{
         try {
 
-             const {userId} = req.user;
+            const {userId} = req.user;
 
             const searchRootFileAndFolder = await File.find({ owner: userId, parentId: null });
+            
+            console.log("\n");
+            
+            console.log("searchRootFileAndFolder :",searchRootFileAndFolder);
 
-
+            console.log("\n");
+            
              return res.status(200).json({
                 success:true,
                 message:"file fetch Successfully...",

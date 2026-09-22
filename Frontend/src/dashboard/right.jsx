@@ -1,17 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import '@xterm/xterm/css/xterm.css';
+import { socket } from '../Config/socketClient.js';
 import { 
   Terminal as TerminalIcon, 
   Sparkles, 
   MessageSquare, 
   X, 
-  Send,
-  Play,
-  Trash2,
-  AlertCircle,
-  CornerDownLeft
+  Send
 } from 'lucide-react';
 
 export const Right = ({ 
+  roomId = 'default_room',
   activeView, 
   onClose,
   terminalOutput = "",
@@ -22,10 +23,10 @@ export const Right = ({
   isRunning = false,
   activeFile = null
 }) => {
-  // Terminal state
-  const [terminalInput, setTerminalInput] = useState('');
-  const [customInputText, setCustomInputText] = useState('');
-  const [terminalHistory, setTerminalHistory] = useState([]);
+  
+  const terminalContainerRef = useRef(null);
+  const xtermRef = useRef(null);
+  const fitAddonRef = useRef(null);
 
   // Gemini state
   const [geminiPrompt, setGeminiPrompt] = useState('');
@@ -39,22 +40,94 @@ export const Right = ({
     { sender: 'System', text: 'Welcome to the collaborative room chat!' }
   ]);
 
-  if (!activeView) return null;
+  // Mount & manage xterm.js canvas
+  useEffect(() => {
+    if (activeView !== 'terminal' || !terminalContainerRef.current) return;
 
-  const handleTerminalSubmit = (e) => {
-    e.preventDefault();
-    if (!terminalInput.trim()) return;
-    setTerminalHistory(prev => [...prev, `$ ${terminalInput}`, "Command received."]);
-    setTerminalInput('');
-  };
+    // 1. Initialize xterm instance with sleek dark theme
+    const term = new Terminal({
+      cursorBlink: true,
+      fontSize: 12,
+      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+      theme: {
+        background: '#0b0816',
+        foreground: '#e2e8f0',
+        cursor: '#a855f7',
+        selectionBackground: 'rgba(168, 85, 247, 0.3)',
+        black: '#1e1a2e',
+        red: '#ef4444',
+        green: '#22c55e',
+        yellow: '#eab308',
+        blue: '#3b82f6',
+        magenta: '#a855f7',
+        cyan: '#06b6d4',
+        white: '#f8fafc'
+      }
+    });
 
-  const handleCustomInputSubmit = (e) => {
-    e?.preventDefault?.();
-    if (onSubmitCustomInput) {
-      onSubmitCustomInput(customInputText);
-      setCustomInputText('');
+    const fitAddon = new FitAddon();
+    term.loadAddon(fitAddon);
+    term.open(terminalContainerRef.current);
+
+    const fitTimer = setTimeout(() => {
+      try {
+        fitAddon.fit();
+      } catch (e) {}
+    }, 50);
+
+    xtermRef.current = term;
+    fitAddonRef.current = fitAddon;
+
+    // 2. Connect socket if disconnected & join room
+    if (!socket.connected) {
+      socket.connect();
     }
-  };
+
+    const currentRoomId = roomId || 'default_room';
+    socket.emit('room:join', { roomId: currentRoomId });
+
+    // 3. Receive data stream from Docker container
+    const handleData = (data) => {
+      term.write(data);
+    };
+    socket.on('terminal:data', handleData);
+
+    // 4. Send user keystrokes to container
+    const disposable = term.onData((data) => {
+      socket.emit('terminal:input', { roomId: currentRoomId, data });
+    });
+
+    // 5. Observe terminal resize and sync dimensions to Docker
+    const resizeObserver = new ResizeObserver(() => {
+      try {
+        fitAddon.fit();
+        if (term.cols && term.rows) {
+          socket.emit('terminal:resize', {
+            roomId: currentRoomId,
+            cols: term.cols,
+            rows: term.rows
+          });
+        }
+      } catch (e) {}
+    });
+
+    resizeObserver.observe(terminalContainerRef.current);
+
+    // Initial welcome banner
+    term.writeln('\x1b[35m[Got Collab Terminal]\x1b[0m Ready. Click Run to execute code.');
+
+    return () => {
+      clearTimeout(fitTimer);
+      resizeObserver.disconnect();
+      disposable.dispose();
+      socket.off('terminal:data', handleData);
+      term.dispose();
+      xtermRef.current = null;
+      fitAddonRef.current = null;
+    };
+  }, [activeView, roomId]);
+
+  if (!activeView) return null;
 
   const handleGeminiSubmit = (e) => {
     e.preventDefault();
@@ -87,6 +160,12 @@ export const Right = ({
             <>
               <TerminalIcon size={14} className="text-purple-400" />
               <span className="text-xs font-semibold text-white">Terminal</span>
+              <div className="flex items-center gap-1.5 ml-2 pl-2 border-l border-[#2e2050]">
+                <span className={`w-1.5 h-1.5 rounded-full ${isRunning ? 'bg-amber-400 animate-ping' : 'bg-emerald-500'}`} />
+                <span className="text-[10px] text-[#8e85a6]">
+                  {isRunning ? "Running..." : "Sandbox"}
+                </span>
+              </div>
             </>
           )}
           {activeView === 'gemini' && (
@@ -105,7 +184,7 @@ export const Right = ({
 
         <button 
           onClick={onClose}
-          className="p-1 hover:text-white hover:bg-[#271b48] rounded text-[#8f85a6] transition"
+          className="p-1 hover:text-white hover:bg-[#271b48] rounded text-[#8f85a6] transition cursor-pointer"
           title="Close Panel"
         >
           <X size={14} />
@@ -114,106 +193,12 @@ export const Right = ({
 
       {/* 2. Panel Body: Terminal */}
       {activeView === 'terminal' && (
-        <div className="flex-1 flex flex-col bg-[#0b0816] p-3 font-mono text-xs overflow-hidden">
-          {/* Top Actions: Run & Clear */}
-          <div className="flex items-center justify-between pb-2 mb-2 border-b border-[#21163f] text-[11px] text-[#8e85a6]">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="font-sans text-[#a79bc4]">Docker Sandbox</span>
-            </div>
-            <div className="flex items-center gap-2">
-              {activeFile && (
-                <button
-                  type="button"
-                  onClick={onRunCode}
-                  disabled={isRunning}
-                  className="flex items-center gap-1 text-emerald-400 hover:text-emerald-300 font-sans transition px-1.5 py-0.5 rounded hover:bg-[#1f1638]"
-                  title="Run Code"
-                >
-                  <Play size={11} className="fill-current" />
-                  <span>{isRunning ? "Running..." : "Run"}</span>
-                </button>
-              )}
-              {onClearTerminal && (
-                <button
-                  type="button"
-                  onClick={onClearTerminal}
-                  className="flex items-center gap-1 text-[#8f85a8] hover:text-white font-sans transition px-1.5 py-0.5 rounded hover:bg-[#1f1638]"
-                  title="Clear Terminal Output"
-                >
-                  <Trash2 size={11} />
-                  <span>Clear</span>
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Terminal Output Area */}
-          <div className="flex-1 overflow-y-auto space-y-2 select-text font-mono text-xs">
-            {!terminalOutput && terminalHistory.length === 0 && (
-              <div className="text-[#645a80] space-y-1 select-none font-mono">
-                <div>Got Collab Sandbox Terminal Initialized.</div>
-                <div>Connected to secure Docker container runtime.</div>
-                <div className="text-purple-400/80">Click "Run" to execute your active file.</div>
-              </div>
-            )}
-
-            {terminalHistory.map((line, idx) => (
-              <div key={`hist-${idx}`} className="leading-relaxed text-[#9f94bf]">{line}</div>
-            ))}
-
-            {terminalOutput && (
-              <pre className="text-green-400 whitespace-pre-wrap font-mono text-xs leading-relaxed">
-                {terminalOutput}
-              </pre>
-            )}
-
-            {/* Interactive Stdin Waiting Form */}
-            {isWaitingForInput && (
-              <div className="mt-3 p-3 rounded-lg bg-[#191036] border border-amber-500/40 font-sans shadow-lg">
-                <div className="flex items-center gap-1.5 text-amber-400 font-semibold text-xs mb-1.5">
-                  <AlertCircle size={14} />
-                  <span>Interactive Input (stdin) Required</span>
-                </div>
-                <p className="text-[11px] text-[#b8aed2] mb-2 font-mono">
-                  Your code expects standard input. Type inputs below (separated by spaces or newlines):
-                </p>
-                <form onSubmit={handleCustomInputSubmit} className="flex flex-col gap-2">
-                  <textarea
-                    rows={3}
-                    value={customInputText}
-                    onChange={(e) => setCustomInputText(e.target.value)}
-                    placeholder="Enter input values here..."
-                    className="w-full bg-[#0d091a] border border-[#3b2a64] rounded p-2 text-xs font-mono text-green-300 outline-none focus:border-amber-400 resize-none"
-                    autoFocus
-                  />
-                  <div className="flex items-center justify-end gap-2">
-                    <button
-                      type="submit"
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-semibold rounded text-xs transition shadow-sm cursor-pointer"
-                    >
-                      <CornerDownLeft size={13} />
-                      <span>Submit Input</span>
-                    </button>
-                  </div>
-                </form>
-              </div>
-            )}
-          </div>
-
-          {/* Bottom command prompt line */}
-          {!isWaitingForInput && (
-            <form onSubmit={handleTerminalSubmit} className="mt-2 flex items-center gap-2 border-t border-[#261a44] pt-2">
-              <span className="text-purple-400 font-bold">$</span>
-              <input 
-                type="text"
-                value={terminalInput}
-                onChange={(e) => setTerminalInput(e.target.value)}
-                placeholder={activeFile ? `Active: ${activeFile.name}` : "Type command..."}
-                className="flex-1 bg-transparent text-green-400 outline-none text-xs font-mono"
-              />
-            </form>
-          )}
+        <div className="flex-1 flex flex-col bg-[#0b0816] overflow-hidden">
+          {/* xterm.js Terminal Canvas */}
+          <div 
+            ref={terminalContainerRef} 
+            className="flex-1 w-full h-full p-2 bg-[#0b0816] overflow-hidden" 
+          />
         </div>
       )}
 

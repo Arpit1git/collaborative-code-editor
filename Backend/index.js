@@ -10,14 +10,14 @@ import { Hocuspocus } from '@hocuspocus/server';
 import { WebSocketServer } from "ws"; 
 import mongoose from "mongoose";
 import { File } from "./src/Models/file.js";
-
+import {registerTerminalSocket} from './src/Socket/terminalSocket.js';
 
 import connectDb from "./src/Config/Mongo_db.js";
 import fileRouter from "./src/Routes/CRUD_Op_File_Routes/crudop_file_routes.js";
 import authRouter from './src/Routes/Auth_Routes/authRoute.js';
 import './src/Queue/codeWorker.js';
 
-import { Logger } from '@hocuspocus/extension-logger';
+// import { Logger } from '@hocuspocus/extension-logger';
 
 
 
@@ -68,19 +68,26 @@ const hocuspocus = new Hocuspocus({
     async onLoadDocument(data) {
         try {
             console.log(`[Hocuspocus] Loading document for room: ${data.documentName}`);
+            
+            const yText = data.document.getText('monaco');
+
+            // CRITICAL: Only inject content if Y.Text is truly empty.
+            // When a client reconnects, their Y.Doc state gets merged with
+            // the server doc. If yText already has content from the merge,
+            // DO NOT inject again — that causes duplication.
+            if (yText.length > 0) {
+                console.log(`[Hocuspocus] Y.Text already has ${yText.length} chars, skipping DB injection.`);
+                return;
+            }
+
             const isObjectId = mongoose.Types.ObjectId.isValid(data.documentName);
             const query = isObjectId ? { _id: data.documentName } : { roomId: data.documentName };
             const file = await File.findOne(query);
             
-            // If the file exists and has saved code, inject it into the editor
+            // If the file exists and has saved code, inject it into the Y.Text
             if (file && file.content) {
-                const yText = data.document.getText('monaco');
-                
-                // Only inject if the Yjs document is currently empty
-                if (yText.length === 0) {
-                    console.log(`[Hocuspocus] Injecting existing code for "${file.name}" into editor...`);
-                    yText.insert(0, file.content);
-                }
+                console.log(`[Hocuspocus] Injecting existing code for "${file.name}" into editor (${file.content.length} chars)...`);
+                yText.insert(0, file.content);
             }
         } catch (err) {
             console.error(`[Hocuspocus ERROR] Error in onLoadDocument:`, err.message);
@@ -131,41 +138,49 @@ const hocuspocusWSS  = new WebSocketServer({noServer:true})
     //
 
 const io = new SocketIOServer(server, {
-    cors: { origin: process.env.FRONTEND_API, methods: ["GET", "POST"] },
+    cors: { 
+        origin: (origin, callback) => {
+            // Allow all localhost origins (e.g. Vite on 5173, 5174, etc.) or FRONTEND_API
+            callback(null, true);
+        },
+        methods: ["GET", "POST"],
+        credentials: true
+    },
     destroyUpgrade: false
 });
 
-io.use((socket,next)=>{
+io.use((socket, next) => {
    try {
-
-        const token = socket.handshake.auth.token;
+        const token = socket.handshake.auth?.token;
         
-
-        if(!token || token.trim()==="")
-        {
+        if (!token || token.trim() === "") {
+            console.warn(`[Socket.IO Auth] Connection rejected for ${socket.id}: No token provided`);
             return next(new Error("Unauthorized: No token provided"));
         }
 
-        jwt.verify(token,process.env.Access_Key,(err,decodedPayload)=>{
-             
-        if(err)
-        {
-            return next(new Error("Forbidden: Invalid or expired token"));
-        }
+        jwt.verify(token, process.env.Access_Key, (err, decodedPayload) => {
+            if (err) {
+                console.warn(`[Socket.IO Auth] Connection rejected for ${socket.id}: Invalid token (${err.message})`);
+                return next(new Error("Forbidden: Invalid or expired token"));
+            }
 
-        socket.user = decodedPayload;
-        next();
-    })
-    
+            socket.user = decodedPayload;
+            console.log(`[Socket.IO Auth] Socket ${socket.id} authenticated for user: ${decodedPayload.userId || decodedPayload.id || 'authorized'}`);
+            next();
+        });
    } catch (error) {
+        console.error(`[Socket.IO Auth] Unexpected error:`, error.message);
         next(new Error("Unknown Server Error"));
    }
-})
+});
+
+// Register interactive collaborative terminal Socket.IO handlers
+registerTerminalSocket(io);
 
 io.on('connection', (socket) => {
     console.log(`[Socket] User connected: ${socket.id}`);
-    socket.on('disconnect', () => {
-        console.log(`[Socket] User disconnected: ${socket.id}`);
+    socket.on('disconnect', (reason) => {
+        console.log(`[Socket] User disconnected: ${socket.id} (${reason})`);
     });
 });
 
@@ -197,12 +212,19 @@ server.on("upgrade",(request,socket,head)=>{
 });
 
 
+hocuspocusWSS.on('error', (err) => {
+    console.error('[Hocuspocus WSS Error]:', err.message);
+});
+
 // When a WebSocket connection is established on this WSS,
 // hand it over to Hocuspocus
-
 hocuspocusWSS.on('connection', (ws, request) => {
     console.log(`[WSS] Connection established, wiring up Hocuspocus v4...`);
     
+    ws.on('error', (err) => {
+        console.error(`[WS Client Error]:`, err.message);
+    });
+
     // 1. v4 strictly requires a Web Standard Request, not a Node IncomingMessage
     const webRequest = new Request(`http://localhost:${process.env.PORT || 8000}${request.url}`);
     
@@ -211,14 +233,20 @@ hocuspocusWSS.on('connection', (ws, request) => {
     
     // 3. YOU must manually listen for messages and hand them to Hocuspocus
     ws.on('message', (data) => {
-        clientConnection.handleMessage(data);
-  
-        
+        try {
+            clientConnection.handleMessage(data);
+        } catch (err) {
+            console.error(`[Hocuspocus Message Error]:`, err.message);
+        }
     });
     
     // 4. YOU must manually tell Hocuspocus when it closes
     ws.on('close', (code, reason) => {
-        clientConnection.handleClose({ code, reason });
+        try {
+            clientConnection.handleClose({ code, reason });
+        } catch (err) {
+            console.error(`[Hocuspocus Close Error]:`, err.message);
+        }
     });
 });
 
