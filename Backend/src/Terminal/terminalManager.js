@@ -71,17 +71,25 @@ class TerminalManager {
             ...command
              ];
 
-
-           const ptyProcess = spawnPty('docker', dockerArgs, {
-            name: 'xterm-256color',
-            cols: 80,
-            rows: 24,
-            cwd: jobDir,
-            env: process.env
-        });
+          let ptyProcess;
+          try {
+              // Wrap the synchronous spawnPty in a try-catch to prevent fatal server crashes
+              ptyProcess = spawnPty('docker', dockerArgs, {
+                name: 'xterm-256color',
+                cols: 80,
+                rows: 24,
+                cwd: jobDir,
+                // Pass a clean environment or minimal required variables instead of the full process.env
+                env: { PATH: process.env.PATH } 
+              });
+          } catch (spawnError) {
+              console.error(`[TerminalManager] Fatal error spawning node-pty for room ${roomId}:`, spawnError);
+              // Clean up the directory since the process failed to start
+              await this.cleanupDisk(jobDir);
+              throw new Error(`Failed to start terminal process: ${spawnError.message}`);
+          }
 
          // 7. Auto-cleanup timer (kills infinite loops / abandoned runs)
-
          const timeoutTimer = setTimeout(()=>{
                console.warn(`[TerminalManager] Room "${roomId}" exceeded max execution time. Terminating...`);
                if (onData) onData("\r\n\x1b[31m[Execution Timed Out (5 min limit)]\x1b[0m\r\n");
@@ -97,6 +105,14 @@ class TerminalManager {
               timeoutTimer,
               history:"",
          });
+
+         if (ptyProcess.on) {
+              ptyProcess.on('error', (err) => {
+                  console.error(`[PTY Error in Room ${roomId}]:`, err);
+                  if (onData) onData(`\r\n\x1b[31m[System Error: Failed to start Docker process]\x1b[0m\r\n`);
+                  this.killSession(roomId);
+              });
+          }
 
           // 9. Stream container output to callback
 

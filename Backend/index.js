@@ -19,6 +19,15 @@ import './src/Queue/codeWorker.js';
 
 // import { Logger } from '@hocuspocus/extension-logger';
 
+process.on('uncaughtException', (err) => {
+    console.error('\n🚨 CRITICAL UNCAUGHT EXCEPTION 🚨');
+    console.error(err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('\n🚨 CRITICAL UNHANDLED REJECTION 🚨');
+    console.error(reason);
+});
 
 
 dotenv.config();
