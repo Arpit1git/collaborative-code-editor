@@ -116,6 +116,8 @@ export const CreateFileOrFolder = async(req,res)=>{
            }
 
            // 3. Ensure the parent is actually a folder (if parentId is provided)
+         let computedRootId = null;
+
          if (parentId) {
             const parentNode = await File.findOne({ _id: parentId, owner: userId });
             if (!parentNode) {
@@ -124,6 +126,8 @@ export const CreateFileOrFolder = async(req,res)=>{
             if (!parentNode.isFolder) {
                 return res.status(400).json({ success: false, message: "Cannot place an item inside a file." });
             }
+
+            computedRootId = parentNode?.rootId?parentNode.rootId :parentNode._id
         }
 
           
@@ -134,7 +138,8 @@ export const CreateFileOrFolder = async(req,res)=>{
                      name:name,
                      isFolder:true,
                      owner:userId,
-                     parentId:parentId || null
+                     parentId:parentId || null,
+                     rootId:computedRootId || null
                 })
 
                 return res.status(201).json({
@@ -154,6 +159,7 @@ export const CreateFileOrFolder = async(req,res)=>{
                   isFolder:false,
                   owner:userId,
                   parentId:parentId || null,
+                  rootId: computedRootId  ||null,
                   language: language || "javascript"
            })
 
@@ -228,6 +234,11 @@ export const SearchFile = async(req,res)=>{
           res.status(500).json({ success: false, message: "Server Error" });
     }
 }
+
+
+
+ 
+
 
 /**
  * @name:CompileFile

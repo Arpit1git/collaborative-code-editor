@@ -34,8 +34,11 @@ export const Ide = () => {
 
   // Execution state synchronized with backend Docker container across the room
   const [isRunning, setIsRunning] = useState(false);
-
+ 
   const currentRoomId = activeFile?._id;
+  
+  console.log(" activeFile :", activeFile);
+  
 
   // Listen to Docker container lifecycle events for this room
   useEffect(() => {
@@ -151,6 +154,8 @@ export const Ide = () => {
       setOpenTabs(prev => [...prev, fileItem]);
     }
     setActiveFile(fileItem);
+   
+    
   };
 
   // Close tab
