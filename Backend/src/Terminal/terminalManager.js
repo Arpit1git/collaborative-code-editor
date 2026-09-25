@@ -14,11 +14,14 @@ const spawnPty = pty.spawn || pty.default?.spawn || pty;
 class TerminalManager {
 
     constructor() {
-        // Map: roomId -> { ptyProcess, jobDir, timeoutTimer, history }
+        // Map: roomId -> { ptyProcess, jobDir, timeoutTimer, history, totalOutputLength }
         this.activeSession = new Map();
         // Map: roomId -> string (stores terminal output even after process exits)
         this.roomHistory = new Map();
-        this.Session_TimeOut = 5 * 60 * 1000;
+        // 20-second execution time limit (TLE protection)
+        this.Session_TimeOut = 20 * 1000;
+        // 50KB max output limit (prevents infinite print loop DOS)
+        this.MAX_OUTPUT_LIMIT = 50 * 1024;
     }
 
     // Checks if a collaborative room currently has an active execution
@@ -74,10 +77,10 @@ class TerminalManager {
             throw new Error(`Failed to start terminal process: ${spawnError.message}`);
         }
 
-        // Auto-cleanup timer (kills infinite loops / abandoned runs)
+        // Auto-cleanup timer (kills infinite loops / abandoned runs after 20s)
         const timeoutTimer = setTimeout(() => {
             console.warn(`[TerminalManager] Room "${roomKey}" exceeded max execution time. Terminating...`);
-            if (onData) onData("\r\n\x1b[31m[Execution Timed Out (5 min limit)]\x1b[0m\r\n");
+            if (onData) onData("\r\n\x1b[31;1m[Time Limit Exceeded (20s limit): Process Terminated]\x1b[0m\r\n");
             this.killSession(roomKey);
         }, this.Session_TimeOut);
 
@@ -86,7 +89,8 @@ class TerminalManager {
             ptyProcess,
             jobDir,
             timeoutTimer,
-            history: ""
+            history: "",
+            totalOutputLength: 0
         });
 
         if (ptyProcess.on) {
@@ -99,13 +103,22 @@ class TerminalManager {
 
         // Stream container output to callback
         ptyProcess.onData((data) => {
+            const session = this.activeSession.get(roomKey);
+            if (!session) return;
+
+            session.totalOutputLength += (data ? data.length : 0);
+
+            // Infinite print loop protection: kill if output exceeds 50KB
+            if (session.totalOutputLength > this.MAX_OUTPUT_LIMIT) {
+                console.warn(`[TerminalManager] Room "${roomKey}" exceeded max output limit (${this.MAX_OUTPUT_LIMIT} bytes). Terminating...`);
+                if (onData) onData("\r\n\x1b[31;1m\r\n[Process Terminated: Output Limit Exceeded (50KB) - Infinite Loop Detected]\x1b[0m\r\n");
+                this.killSession(roomKey);
+                return;
+            }
+
             const prevHistory = this.roomHistory.get(roomKey) || "";
             this.roomHistory.set(roomKey, (prevHistory + data).slice(-50000));
-
-            const session = this.activeSession.get(roomKey);
-            if (session) {
-                session.history = (session.history + data).slice(-20000);
-            }
+            session.history = (session.history + data).slice(-20000);
 
             if (onData) onData(data);
         });
