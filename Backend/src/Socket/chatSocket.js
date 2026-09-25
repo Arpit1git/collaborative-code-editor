@@ -59,6 +59,12 @@ export function registerChatSocket(io) {
             if (!roomId) return;
             try {
                 const projectRootId = await resolveProjectRootId(roomId);
+
+                // Auto-join the socket to projectRootId and roomId
+                socket.join(projectRootId);
+                if (roomId && roomId !== projectRootId) {
+                    socket.join(roomId);
+                }
                 
                 // Fetch up to 100 most recent messages sorted chronologically
                 const messages = await Message.find({ rootId: projectRootId })
@@ -97,6 +103,12 @@ export function registerChatSocket(io) {
                 const resolvedSender = sender || socket.user?.userName || socket.user?.name || 'Teammate';
                 const resolvedSenderId = senderId || socket.user?.userId || socket.user?.id;
 
+                // Ensure sender socket is in both rooms
+                socket.join(projectRootId);
+                if (roomId && roomId !== projectRootId) {
+                    socket.join(roomId);
+                }
+
                 if (!resolvedSenderId || !mongoose.Types.ObjectId.isValid(resolvedSenderId)) {
                     console.warn("[chatSocket] Invalid senderId for chat message:", resolvedSenderId);
                 }
@@ -104,7 +116,7 @@ export function registerChatSocket(io) {
                 // Save message into MongoDB
                 const savedMessage = await Message.create({
                     rootId: projectRootId,
-                    sender: resolvedSenderId,
+                    sender: resolvedSenderId && mongoose.Types.ObjectId.isValid(resolvedSenderId) ? resolvedSenderId : new mongoose.Types.ObjectId(),
                     senderName: resolvedSender,
                     text: text.trim()
                 });
@@ -115,15 +127,15 @@ export function registerChatSocket(io) {
                     roomId: projectRootId,
                     text: savedMessage.text,
                     sender: savedMessage.senderName,
-                    senderId: savedMessage.sender.toString(),
+                    senderId: savedMessage.sender ? savedMessage.sender.toString() : null,
                     avatar: avatar || (savedMessage.senderName || "U").charAt(0).toUpperCase(),
                     createdAt: savedMessage.createdAt.toISOString(),
                     timestamp: savedMessage.createdAt.toISOString()
                 };
 
-                // Broadcast to the project root room and active socket room
+                // Broadcast to both project root room and active room (frontend deduplicates by ID)
                 io.to(projectRootId).emit("chat:message", payload);
-                if (roomId !== projectRootId) {
+                if (roomId && roomId !== projectRootId) {
                     io.to(roomId).emit("chat:message", payload);
                 }
             } catch (err) {
@@ -144,7 +156,7 @@ export function registerChatSocket(io) {
                     isTyping: Boolean(isTyping)
                 });
 
-                if (roomId !== projectRootId) {
+                if (roomId && roomId !== projectRootId) {
                     socket.to(roomId).emit("chat:typing", {
                         roomId,
                         userName: resolvedName,

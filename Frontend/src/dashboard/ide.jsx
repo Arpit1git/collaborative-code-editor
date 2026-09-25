@@ -5,8 +5,7 @@ import { Group, Panel, Separator } from 'react-resizable-panels';
 import { 
   PanelLeft, 
   Terminal as TerminalIcon, 
-  Sparkles, 
-  MessageSquare,
+  MessageSquare, 
   Code2,
   Play,
   Square,
@@ -19,7 +18,8 @@ import {
   LogOut,
   Trash2,
   Crown,
-  ShieldAlert
+  ShieldAlert,
+  ArrowLeft
 } from 'lucide-react';
 
 import Left from './left.jsx';
@@ -35,11 +35,12 @@ export const Ide = () => {
   const { user, logout } = useAuth();
   const [searchParams] = useSearchParams();
   const queryFileId = searchParams.get('file');
+  const queryProjectId = searchParams.get('project') || searchParams.get('roomId');
   
   // Left div open/close state
   const [isLeftOpen, setIsLeftOpen] = useState(true);
 
-  // Right div view state ('terminal' | 'gemini' | 'chat' | null)
+  // Right div view state ('terminal' | 'chat' | null)
   const [rightView, setRightView] = useState(null);
 
   // Tab and active file state (starts completely empty)
@@ -66,7 +67,8 @@ export const Ide = () => {
   const [hasUnreadChat, setHasUnreadChat] = useState(false);
  
   const currentRoomId = activeFile?._id;
-  const targetRoomId = activeFile?.rootId || activeFile?._id;
+  const targetRoomId = activeFile?.rootId || queryProjectId || activeFile?._id;
+  const executionRoomId = targetRoomId || currentRoomId;
 
   // Check if the current logged-in user is the owner of the active file/project
   const activeOwnerId = typeof activeFile?.owner === 'object' ? activeFile?.owner?._id : activeFile?.owner;
@@ -110,20 +112,21 @@ export const Ide = () => {
     }
   }, [targetRoomId, fetchCollaborators]);
 
-  // Automatically open shared file when joining a project via invite URL
+  // Automatically open file when joining via invite URL or navigating from Dashboard
   useEffect(() => {
-    if (queryFileId && !activeFile) {
-      getFileById(queryFileId)
+    const fileToOpenId = queryFileId || queryProjectId;
+    if (fileToOpenId && !activeFile) {
+      getFileById(fileToOpenId)
         .then((res) => {
-          if (res?.file) {
+          if (res?.file && !res.file.isFolder) {
             handleOpenFile(res.file);
           }
         })
         .catch((err) => {
-          console.error("Could not auto-open shared file from URL query:", err);
+          console.error("Could not auto-open file from URL query:", err);
         });
     }
-  }, [queryFileId]);
+  }, [queryFileId, queryProjectId]);
 
   // Listen to Docker container lifecycle & Collaboration Room events
   useEffect(() => {
@@ -178,8 +181,12 @@ export const Ide = () => {
         alert("⚠️ You have been removed from this project by the owner.");
         setActiveFile(null);
         setOpenTabs([]);
+        setCollaborators([]);
+        setRoomOwner(null);
         setIsAccessModalOpen(false);
-        navigate('/login', { replace: true });
+        setIsInviteOpen(false);
+        window.history.replaceState({}, document.title, window.location.pathname);
+        window.location.reload();
       } else if (targetUserId) {
         // Mark kicked user as left/removed with gray styling on other screens
         setCollaborators((prev) =>
@@ -208,15 +215,21 @@ export const Ide = () => {
       );
     };
 
-    const handleRoomDestroyed = () => {
+    const handleRoomDestroyed = ({ roomId: destroyedRoomId, ownerId }) => {
       const myId = user?._id || user?.userId || user?.id;
-      const isMeOwner = (activeOwnerId && myId && activeOwnerId.toString() === myId.toString());
+      const isMeOwner = (ownerId && myId && ownerId.toString() === myId.toString()) ||
+                        (activeOwnerId && myId && activeOwnerId.toString() === myId.toString());
+
       if (!isMeOwner) {
-        alert("⚠️ This collaborative session was ended by the project owner.");
+        alert("⚠️ This collaborative session was ended by the project owner. The project is now private.");
         setActiveFile(null);
         setOpenTabs([]);
+        setCollaborators([]);
+        setRoomOwner(null);
         setIsAccessModalOpen(false);
-        navigate('/login', { replace: true });
+        setIsInviteOpen(false);
+        window.history.replaceState({}, document.title, window.location.pathname);
+        window.location.reload();
       } else {
         fetchCollaborators();
       }
@@ -261,7 +274,7 @@ export const Ide = () => {
     if (!activeFile) return;
 
     if (isRunning) {
-      socket.emit('terminal:stop', { roomId: currentRoomId });
+      socket.emit('terminal:stop', { roomId: executionRoomId });
       setIsRunning(false);
       return;
     }
@@ -286,7 +299,7 @@ export const Ide = () => {
     }
 
     socket.emit('terminal:run', {
-      roomId: currentRoomId,
+      roomId: executionRoomId,
       language,
       content
     });
@@ -453,8 +466,18 @@ export const Ide = () => {
     <div className="h-screen w-screen flex flex-col bg-[#0b0817] text-white overflow-hidden text-left font-sans select-none relative">
       {/* 1. Main Top Navbar */}
       <header className="h-11 w-full bg-[#130d29] border-b border-[#261a44] flex items-center justify-between px-3 shrink-0 z-10">
-        {/* Left corner: IDE Name + Toggle Left Div Button */}
-        <div className="flex items-center gap-3">
+        {/* Left corner: IDE Name + Toggle Left Div Button + Back to Dashboard */}
+        <div className="flex items-center gap-2.5">
+          <button 
+            type="button"
+            onClick={() => navigate('/dashboard')}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium text-[#9e94bf] hover:text-white bg-[#191136] hover:bg-[#25184c] border border-[#2b1f4c] transition active:scale-95 cursor-pointer shadow-xs"
+            title="Back to Workspaces Dashboard"
+          >
+            <ArrowLeft size={13} />
+            <span className="hidden sm:inline">Dashboard</span>
+          </button>
+
           <button 
             type="button"
             onClick={toggleLeftDiv}
@@ -476,7 +499,7 @@ export const Ide = () => {
           </div>
         </div>
 
-        {/* Right corner: Invite + Collaborators + Leave + Run Button + Three options (Terminal, Gemini, Chat) */}
+        {/* Right corner: Invite + Collaborators + Leave + Run Button + Two options (Terminal, Chat) */}
         <div className="flex items-center gap-2">
           {/* 1. Invite Button (Only visible to the project owner User A) */}
           {isOwner && (
@@ -563,22 +586,7 @@ export const Ide = () => {
             <span>Open Terminal</span>
           </button>
 
-          {/* Option 2: Gemini */}
-          <button
-            type="button"
-            onClick={() => handleToggleRightView('gemini')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition cursor-pointer ${
-              rightView === 'gemini'
-                ? 'bg-purple-700 text-white shadow-xs'
-                : 'bg-[#1a1236] text-[#9f94bf] hover:bg-[#261b4a] hover:text-white border border-[#2b1f4c]'
-            }`}
-            title="Toggle Gemini AI"
-          >
-            <Sparkles size={14} className="text-purple-300" />
-            <span>Gemini</span>
-          </button>
-
-          {/* Option 3: Chat */}
+          {/* Option 2: Chat */}
           <button
             type="button"
             onClick={() => handleToggleRightView('chat')}
@@ -677,7 +685,7 @@ export const Ide = () => {
               className="h-full overflow-hidden"
             >
               <Right 
-                roomId={targetRoomId || currentRoomId}
+                roomId={executionRoomId}
                 activeView={rightView} 
                 onClose={() => setRightView(null)} 
                 onRunCode={handleRunOrStop}

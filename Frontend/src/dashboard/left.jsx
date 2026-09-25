@@ -10,7 +10,12 @@ import {
   ChevronDown,
   Loader2
 } from 'lucide-react';
-import { getRootFilesAndFolders, getFilesInsideFolder, createFileOrFolder } from '../features/Workspace/api/fileapi.js';
+import { 
+  getRootFilesAndFolders, 
+  getFilesInsideFolder, 
+  createFileOrFolder,
+  getFileById 
+} from '../features/Workspace/api/fileapi.js';
 import { useAuth } from '../features/auth/Context/AuthContext.jsx';
 
 // Helper to extract extension and map to Monaco language
@@ -125,7 +130,7 @@ export const FolderItem = ({
           <button
             type="button"
             onClick={(e) => handleStartCreate(e, false)}
-            className="p-0.5 hover:text-white hover:bg-[#341b58] rounded transition"
+            className="p-0.5 hover:text-white hover:bg-[#341b58] rounded transition cursor-pointer"
             title="New File Inside"
           >
             <FilePlus size={13} />
@@ -134,7 +139,7 @@ export const FolderItem = ({
           <button
             type="button"
             onClick={(e) => handleStartCreate(e, true)}
-            className="p-0.5 hover:text-white hover:bg-[#341b58] rounded transition"
+            className="p-0.5 hover:text-white hover:bg-[#341b58] rounded transition cursor-pointer"
             title="New Subfolder"
           >
             <FolderPlus size={13} />
@@ -223,15 +228,17 @@ export const FileItem = ({ item, depth = 0, onSelectFile, isActive = false }) =>
   >
     <FileCode size={13} className="text-yellow-400 shrink-0" />
     <span className="truncate">{item.name}</span>
-
   </div>
 );
 
-// ── MAIN LEFT COMPONENT (REAL BACKEND INTEGRATION) ──
+// ── MAIN LEFT COMPONENT (SCOPED PROJECT & WORKSPACE EXPLORER) ──
 export const Left = ({ onSelectFile, activeFileId, triggerRootCreate, setTriggerRootCreate }) => {
   const { accessToken } = useAuth();
 
-  // Root files & folders state (starts empty, populated from backend)
+  // Project context state (when opened with ?project=<id> or ?roomId=<id>)
+  const [currentProject, setCurrentProject] = useState(null);
+
+  // Root files & folders state (direct children of the workspace/project)
   const [rootItems, setRootItems] = useState([]);
   const [childrenMap, setChildrenMap] = useState({}); // { [folderId]: childItems }
   const [expandedFolders, setExpandedFolders] = useState({});
@@ -242,18 +249,63 @@ export const Left = ({ onSelectFile, activeFileId, triggerRootCreate, setTrigger
   const [rootCreationState, setRootCreationState] = useState(null);
   const [rootInputName, setRootInputName] = useState('');
 
-  // 1. Initial Load & Room-change Load: Fetch Root Files & Folders from backend
+  // 1. Initial Load & Scoped Project Load
   const [searchParams] = useSearchParams();
-  const queryRoomId = searchParams.get('roomId');
+  const queryProjectId = searchParams.get('project') || searchParams.get('roomId');
+  const queryFileId = searchParams.get('file');
 
   useEffect(() => {
     const fetchRoots = async () => {
       try {
         setIsLoadingRoot(true);
-        const data = await getRootFilesAndFolders(accessToken);
-        setRootItems(data);
+
+        if (queryProjectId) {
+          // Scoped IDE mode: Fetch only this specific project folder / file
+          const projectRes = await getFileById(queryProjectId, accessToken);
+          if (projectRes?.file) {
+            const doc = projectRes.file;
+            setCurrentProject(doc);
+
+            if (doc.isFolder) {
+              // Fetch all direct child files and subfolders inside this project folder
+              const children = await getFilesInsideFolder(doc._id, accessToken);
+              setRootItems(children || []);
+
+              // Auto-open file if no file is currently open
+              if (onSelectFile && !activeFileId) {
+                if (queryFileId) {
+                  const matchingFile = (children || []).find(c => c._id === queryFileId);
+                  if (matchingFile && !matchingFile.isFolder) {
+                    onSelectFile(matchingFile);
+                  }
+                } else {
+                  // Open the first file inside this project folder
+                  const firstFile = (children || []).find(c => !c.isFolder);
+                  if (firstFile) {
+                    onSelectFile(firstFile);
+                  }
+                }
+              }
+            } else {
+              // Single file workspace mode
+              setRootItems([doc]);
+              if (onSelectFile && !activeFileId) {
+                onSelectFile(doc);
+              }
+            }
+          } else {
+            setCurrentProject(null);
+            const data = await getRootFilesAndFolders(accessToken);
+            setRootItems(data || []);
+          }
+        } else {
+          // Standard / Full workspace mode
+          setCurrentProject(null);
+          const data = await getRootFilesAndFolders(accessToken);
+          setRootItems(data || []);
+        }
       } catch (err) {
-        console.error("Error fetching root items:", err);
+        console.error("Error fetching items in Left explorer:", err);
       } finally {
         setIsLoadingRoot(false);
       }
@@ -262,23 +314,9 @@ export const Left = ({ onSelectFile, activeFileId, triggerRootCreate, setTrigger
     if (accessToken) {
       fetchRoots();
     }
-  }, [accessToken, queryRoomId]);
+  }, [accessToken, queryProjectId, queryFileId]);
 
-  // Auto-expand shared project folder when joining via invite URL
-  useEffect(() => {
-    if (queryRoomId && accessToken) {
-      setExpandedFolders(prev => ({ ...prev, [queryRoomId]: true }));
-      getFilesInsideFolder(queryRoomId, accessToken)
-        .then(children => {
-          setChildrenMap(prev => ({ ...prev, [queryRoomId]: children }));
-        })
-        .catch(err => {
-          console.error("Error auto-expanding shared folder:", err);
-        });
-    }
-  }, [queryRoomId, accessToken]);
-
-  // Handle external trigger to create file or folder at root
+  // Handle external trigger to create file or folder from Central empty state
   useEffect(() => {
     if (triggerRootCreate) {
       const isFolder = typeof triggerRootCreate === 'object' && triggerRootCreate !== null 
@@ -299,7 +337,7 @@ export const Left = ({ onSelectFile, activeFileId, triggerRootCreate, setTrigger
       try {
         setLoadingFolders(prev => ({ ...prev, [folderId]: true }));
         const children = await getFilesInsideFolder(folderId, accessToken);
-        setChildrenMap(prev => ({ ...prev, [folderId]: children }));
+        setChildrenMap(prev => ({ ...prev, [folderId]: children || [] }));
       } catch (err) {
         console.error(`Error loading folder ${folderId}:`, err);
       } finally {
@@ -312,24 +350,31 @@ export const Left = ({ onSelectFile, activeFileId, triggerRootCreate, setTrigger
   const handleCreateItem = async ({ name, parentId, isFolder }) => {
     const { language } = parseFileInfo(name);
 
+    // If parentId is not specified, default to the scoped project's ID (if in a folder project)
+    const effectiveParentId = (parentId !== undefined && parentId !== null)
+      ? parentId
+      : (currentProject?.isFolder ? currentProject._id : null);
+
     try {
       const createdItem = await createFileOrFolder({
         name,
         isFolder,
-        parentId: parentId || null,
+        parentId: effectiveParentId,
         language: isFolder ? "" : language
       }, accessToken);
 
       if (createdItem) {
-        // Update tree state immediately
-        if (!parentId) {
+        // Determine whether this item belongs to the root Explorer view
+        const isCurrentRoot = !effectiveParentId || (currentProject?.isFolder && effectiveParentId === currentProject._id);
+
+        if (isCurrentRoot) {
           setRootItems(prev => [...prev, createdItem]);
         } else {
           setChildrenMap(prev => ({
             ...prev,
-            [parentId]: [...(prev[parentId] || []), createdItem]
+            [effectiveParentId]: [...(prev[effectiveParentId] || []), createdItem]
           }));
-          setExpandedFolders(prev => ({ ...prev, [parentId]: true }));
+          setExpandedFolders(prev => ({ ...prev, [effectiveParentId]: true }));
         }
 
         // If it's a file, automatically open it in Monaco Editor & Tabs!
@@ -349,7 +394,7 @@ export const Left = ({ onSelectFile, activeFileId, triggerRootCreate, setTrigger
 
     handleCreateItem({
       name: rootInputName.trim(),
-      parentId: null,
+      // effectiveParentId will automatically use currentProject._id or null
       isFolder: rootCreationState.isFolder
     });
 
@@ -361,23 +406,42 @@ export const Left = ({ onSelectFile, activeFileId, triggerRootCreate, setTrigger
     <div className="flex flex-col h-full w-full bg-[#120d24] text-[#cfc8de] border-r border-[#261a44] text-left select-none overflow-hidden">
       {/* Top Navbar */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-[#261a44] bg-[#160f2d] h-9 shrink-0">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-[#9b91b8]">
-          Explorer
-        </span>
-        <div className="flex items-center gap-1 text-[#a69cc4]">
+        <div className="flex items-center gap-1.5 min-w-0 pr-1">
+          {currentProject ? (
+            <>
+              {currentProject.isFolder ? (
+                <Folder size={13} className="text-purple-400 shrink-0" />
+              ) : (
+                <FileCode size={13} className="text-yellow-400 shrink-0" />
+              )}
+              <span 
+                className="text-[11px] font-bold uppercase tracking-wider text-purple-200 truncate"
+                title={`Project Root: ${currentProject.name}`}
+              >
+                {currentProject.name}
+              </span>
+            </>
+          ) : (
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-[#9b91b8]">
+              Explorer
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1 text-[#a69cc4] shrink-0">
           <button 
             type="button"
             onClick={() => setRootCreationState({ isFolder: false })}
-            className="p-1 hover:text-white hover:bg-[#271b48] rounded transition"
-            title="New File at Root"
+            className="p-1 hover:text-white hover:bg-[#271b48] rounded transition cursor-pointer"
+            title={currentProject?.isFolder ? `New File in ${currentProject.name}` : "New File at Root"}
           >
             <FilePlus size={15} />
           </button>
           <button 
             type="button"
             onClick={() => setRootCreationState({ isFolder: true })}
-            className="p-1 hover:text-white hover:bg-[#271b48] rounded transition"
-            title="New Folder at Root"
+            className="p-1 hover:text-white hover:bg-[#271b48] rounded transition cursor-pointer"
+            title={currentProject?.isFolder ? `New Folder in ${currentProject.name}` : "New Folder at Root"}
           >
             <FolderPlus size={15} />
           </button>
@@ -421,12 +485,14 @@ export const Left = ({ onSelectFile, activeFileId, triggerRootCreate, setTrigger
           </div>
         ) : rootItems.length === 0 && !rootCreationState ? (
           <div className="p-4 text-center text-[#736891] space-y-2">
-            <p className="text-xs">No files or folders yet.</p>
+            <p className="text-xs">
+              {currentProject ? `"${currentProject.name}" is empty.` : "No files or folders yet."}
+            </p>
             <div className="flex items-center justify-center gap-3 pt-1">
               <button
                 type="button"
                 onClick={() => setRootCreationState({ isFolder: false })}
-                className="text-[11px] text-purple-400 hover:text-purple-300 underline font-medium"
+                className="text-[11px] text-purple-400 hover:text-purple-300 underline font-medium cursor-pointer"
               >
                 + Create file
               </button>
@@ -434,7 +500,7 @@ export const Left = ({ onSelectFile, activeFileId, triggerRootCreate, setTrigger
               <button
                 type="button"
                 onClick={() => setRootCreationState({ isFolder: true })}
-                className="text-[11px] text-indigo-400 hover:text-indigo-300 underline font-medium"
+                className="text-[11px] text-indigo-400 hover:text-indigo-300 underline font-medium cursor-pointer"
               >
                 + Create folder
               </button>
@@ -457,8 +523,8 @@ export const Left = ({ onSelectFile, activeFileId, triggerRootCreate, setTrigger
               />
             ) : (
               <FileItem 
-                key={item._id}
-                item={item}
+                key={item._id} 
+                item={item} 
                 depth={0}
                 onSelectFile={onSelectFile}
                 isActive={activeFileId === item._id}

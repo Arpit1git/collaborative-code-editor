@@ -1,5 +1,3 @@
-
-
 /**
  * commandBuilder.js
  * Translates programming language identifiers into the correct file extension,
@@ -30,8 +28,14 @@ export const getLanguageConfig = (language, content = "") => {
         case "c++":
             return {
                 fileName: "code.cpp",
-                // Uses sh -c so the shell can evaluate the "&&" operator
-                command: ["sh", "-c", "g++ code.cpp -o a.out && ./a.out"]
+                // Compile binary to container-isolated /tmp to avoid ETXTBUSY / "Text file busy" on mounted host volumes
+                command: ["sh", "-c", "rm -f /tmp/a.out && g++ code.cpp -o /tmp/a.out && /tmp/a.out"]
+            };
+
+        case "c":
+            return {
+                fileName: "code.c",
+                command: ["sh", "-c", "rm -f /tmp/a.out && gcc code.c -o /tmp/a.out && /tmp/a.out"]
             };
 
         case "java": {
@@ -51,7 +55,7 @@ export const getLanguageConfig = (language, content = "") => {
         }
 
         default:
-            throw new Error(`Unsupported language: "${language}". Supported: python, cpp, javascript, java.`);
+            throw new Error(`Unsupported language: "${language}". Supported: python, cpp, c, javascript, java.`);
     }
 };
 
@@ -61,6 +65,7 @@ export const getExtensionForLanguage = (language) => {
         javascript: '.js',
         cpp: '.cpp',
         'c++': '.cpp',
+        c: '.c',
         java: '.java',
         bash: '.sh'
     };

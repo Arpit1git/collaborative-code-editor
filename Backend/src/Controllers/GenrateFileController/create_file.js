@@ -97,48 +97,59 @@ export const CreateFileOrFolder = async(req,res)=>{
                })
            }
 
-           const seachfileorFolderNmae = await File.findOne(
-            {
-                name:name,
-                parentId:parentId||null,
-                owner:userId
-            }
-        );
+           let computedRootId = null;
+           let parentNode = null;
 
-           
+           if (parentId) {
+               parentNode = await File.findOne({ 
+                   _id: parentId,
+                   $or: [
+                       { owner: userId },
+                       { collaborators: userId },
+                       { collabration: userId }
+                   ]
+               });
 
-           if(seachfileorFolderNmae){
-                 return res.status(400).json({
-                    success:false,
-                    message:"File or Folder exist by this name"
-                 })
+               if (!parentNode) {
+                   return res.status(404).json({ success: false, message: "Parent directory not found." });
+               }
+               if (!parentNode.isFolder) {
+                   return res.status(400).json({ success: false, message: "Cannot place an item inside a file." });
+               }
+
+               computedRootId = parentNode?.rootId ? parentNode.rootId : parentNode._id;
            }
 
-           // 3. Ensure the parent is actually a folder (if parentId is provided)
-         let computedRootId = null;
+           const effectiveOwner = parentNode ? parentNode.owner : userId;
 
-         if (parentId) {
-            const parentNode = await File.findOne({ _id: parentId, owner: userId });
-            if (!parentNode) {
-                return res.status(404).json({ success: false, message: "Parent directory not found." });
-            }
-            if (!parentNode.isFolder) {
-                return res.status(400).json({ success: false, message: "Cannot place an item inside a file." });
-            }
+           const seachfileorFolderNmae = await File.findOne({
+               name: name,
+               parentId: parentId || null,
+               owner: effectiveOwner
+           });
 
-            computedRootId = parentNode?.rootId?parentNode.rootId :parentNode._id
-        }
+           if (seachfileorFolderNmae) {
+               return res.status(400).json({
+                   success: false,
+                   message: "File or Folder exist by this name"
+               });
+           }
 
           
            
+           const inheritCollaborators = parentNode?.collaborators || [];
+           const inheritCollabration = parentNode?.collabration || [];
+
            if(isFolder){
               
              const folder=   await File.create({
                      name:name,
                      isFolder:true,
-                     owner:userId,
+                     owner:effectiveOwner,
                      parentId:parentId || null,
-                     rootId:computedRootId || null
+                     rootId:computedRootId || null,
+                     collaborators: inheritCollaborators,
+                     collabration: inheritCollabration
                 })
 
                 return res.status(201).json({
@@ -156,10 +167,12 @@ export const CreateFileOrFolder = async(req,res)=>{
                     
                   name:name,
                   isFolder:false,
-                  owner:userId,
-                  parentId:parentId || null,
-                  rootId: computedRootId  ||null,
-                  language: language || "javascript"
+                  owner: effectiveOwner,
+                   parentId: parentId || null,
+                   rootId: computedRootId || null,
+                   language: language || "javascript",
+                   collaborators: inheritCollaborators,
+                   collabration: inheritCollabration
            })
 
 

@@ -9,7 +9,7 @@ export function SignupPage() {
     const [error, setError] = useState(null);
     const [pending, setPending] = useState(false);
 
-    const redirectUrl = searchParams.get("redirect") || "/ide";
+    const redirectUrl = searchParams.get("redirect") || "/dashboard";
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -31,7 +31,7 @@ export function SignupPage() {
         }
     };
 
-    const loginLink = redirectUrl !== "/ide" 
+    const loginLink = redirectUrl !== "/dashboard" 
         ? `/login?redirect=${encodeURIComponent(redirectUrl)}` 
         : "/login";
 

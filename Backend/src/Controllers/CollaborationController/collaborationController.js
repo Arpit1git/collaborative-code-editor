@@ -490,14 +490,41 @@ export const destroyRoomSession = async (req, res) => {
 
         const resolvedRoomId = rootDoc._id.toString();
 
-        // 1. Clear all collaborators from MongoDB (makes the project private again)
+        // 1. Find all files belonging to this project (root, child, and descendants)
+        const projectFiles = await File.find({
+            $or: [
+                { _id: resolvedRoomId },
+                { _id: roomId },
+                { rootId: resolvedRoomId },
+                { rootId: roomId },
+                { parentId: resolvedRoomId }
+            ]
+        });
+
+        // 2. Gather all collaborator user IDs across all project files
+        const affectedUserIds = new Set();
+        for (const file of projectFiles) {
+            if (Array.isArray(file.collaborators)) {
+                file.collaborators.forEach(c => {
+                    if (c) affectedUserIds.add(c.toString());
+                });
+            }
+            if (Array.isArray(file.collabration)) {
+                file.collabration.forEach(c => {
+                    if (c) affectedUserIds.add(c.toString());
+                });
+            }
+        }
+
+        // 3. Clear all collaborators from MongoDB across the entire project (makes the project private)
         await File.updateMany(
             {
                 $or: [
                     { _id: resolvedRoomId },
                     { _id: roomId },
                     { rootId: resolvedRoomId },
-                    { rootId: roomId }
+                    { rootId: roomId },
+                    { parentId: resolvedRoomId }
                 ]
             },
             {
@@ -505,19 +532,43 @@ export const destroyRoomSession = async (req, res) => {
             }
         );
 
-        // 2. Delete any active Redis invite tokens
+        // 4. Delete any active Redis invite tokens
         const activeToken = await redisConnection.get(`room_invite:${resolvedRoomId}`);
         if (activeToken) {
             await redisConnection.del(`invite:${activeToken}`, `room_invite:${resolvedRoomId}`);
         }
 
-        // 3. Real-time broadcast to kick all connected collaborators
+        // 5. Comprehensive Real-time broadcast to kick all connected collaborators immediately
         const io = req.app.get('io');
         if (io) {
-            io.to(resolvedRoomId).emit("room:destroyed", {
+            const payload = {
                 roomId: resolvedRoomId,
-                message: "This collaborative session has been ended by the owner."
-            });
+                ownerId: userId.toString(),
+                message: "This collaborative session has been ended by the owner. The project is now private."
+            };
+
+            // Emit to project root room and active requested room
+            io.to(resolvedRoomId).emit("room:destroyed", payload);
+            if (roomId !== resolvedRoomId) {
+                io.to(roomId).emit("room:destroyed", payload);
+            }
+
+            // Emit to every individual file room in this project
+            for (const file of projectFiles) {
+                const fId = file._id.toString();
+                io.to(fId).emit("room:destroyed", payload);
+            }
+
+            // Direct personal socket push to every collaborator's personal room
+            for (const collabId of affectedUserIds) {
+                if (collabId !== userId.toString()) {
+                    io.to(collabId).emit("room:destroyed", payload);
+                    io.to(`user:${collabId}`).emit("room:destroyed", payload);
+                }
+            }
+
+            // Notify owner's UI that collaborators list is now cleared
+            io.to(resolvedRoomId).emit("room:collaborators-updated", { roomId: resolvedRoomId });
         }
 
         return res.status(200).json({

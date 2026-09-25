@@ -12,7 +12,6 @@ import mongoose from "mongoose";
 import { File } from "./src/Models/file.js";
 import {registerTerminalSocket} from './src/Socket/terminalSocket.js';
 import {registerChatSocket} from './src/Socket/chatSocket.js';
-import {registerGeminiSocket} from './src/Socket/geminiSocket.js';
 
 import connectDb from "./src/Config/Mongo_db.js";
 import fileRouter from "./src/Routes/CRUD_Op_File_Routes/crudop_file_routes.js";
@@ -60,7 +59,6 @@ const hocuspocus = new Hocuspocus({
     
 
     async onAuthenticate(data) {
-
         const token = data.token;
         console.log(`[Hocuspocus] Authentication attempt for room: ${data.documentName}`);
 
@@ -70,11 +68,30 @@ const hocuspocus = new Hocuspocus({
 
         try {
             const decoded = jwt.verify(token, process.env.Access_Key);
+            const userId = decoded.userId || decoded.id;
+
+            // Strict permission check: User must be owner or active collaborator
+            const isObjectId = mongoose.Types.ObjectId.isValid(data.documentName);
+            if (isObjectId) {
+                const file = await File.findById(data.documentName);
+                if (file) {
+                    const ownerId = file.owner ? file.owner.toString() : null;
+                    const isOwner = ownerId && userId && ownerId === userId.toString();
+                    const isCollab = (file.collaborators || []).some(c => c && c.toString() === userId.toString()) ||
+                                     (file.collabration || []).some(c => c && c.toString() === userId.toString());
+
+                    if (!isOwner && !isCollab) {
+                        console.warn(`[Hocuspocus Auth Denied] User ${userId} is not authorized for file ${data.documentName}`);
+                        throw new Error("Forbidden: This file is private and you do not have permission to access it.");
+                    }
+                }
+            }
+
             console.log(`[Hocuspocus] User authenticated successfully!`);
             return decoded;
         } catch (err) {
-            console.error("[Hocuspocus] Auth Failed: Invalid token");
-            throw new Error("Forbidden: Invalid or expired token");
+            console.error("[Hocuspocus] Auth Failed:", err.message);
+            throw new Error("Forbidden: " + err.message);
         }
     },
 
@@ -85,9 +102,6 @@ const hocuspocus = new Hocuspocus({
             const yText = data.document.getText('monaco');
 
             // CRITICAL: Only inject content if Y.Text is truly empty.
-            // When a client reconnects, their Y.Doc state gets merged with
-            // the server doc. If yText already has content from the merge,
-            // DO NOT inject again — that causes duplication.
             if (yText.length > 0) {
                 console.log(`[Hocuspocus] Y.Text already has ${yText.length} chars, skipping DB injection.`);
                 return;
@@ -111,10 +125,29 @@ const hocuspocus = new Hocuspocus({
         try {
             const rawCode = data.document.getText('monaco').toString();
             console.log(`[DB SAVE] File ${data.documentName} updated!`);
-            console.log(`Code Content:\n${rawCode}`);
 
             const isObjectId = mongoose.Types.ObjectId.isValid(data.documentName);
             const query = isObjectId ? { _id: data.documentName } : { roomId: data.documentName };
+
+            const file = await File.findOne(query);
+            if (!file) {
+                console.log(`[DB] Document ${data.documentName} not found in DB (nothing to update).`);
+                return;
+            }
+
+            // Reject write if writer is not authorized
+            const writerUserId = data.context?.userId || data.context?.id;
+            if (writerUserId) {
+                const ownerId = file.owner ? file.owner.toString() : null;
+                const isOwner = ownerId && ownerId === writerUserId.toString();
+                const isCollab = (file.collaborators || []).some(c => c && c.toString() === writerUserId.toString()) ||
+                                 (file.collabration || []).some(c => c && c.toString() === writerUserId.toString());
+
+                if (!isOwner && !isCollab) {
+                    console.warn(`[DB SAVE BLOCKED] Unauthorized write rejected for user ${writerUserId} on file ${data.documentName}`);
+                    return;
+                }
+            }
 
             const updated = await File.findOneAndUpdate(
                 query, 
@@ -194,9 +227,6 @@ registerTerminalSocket(io);
 
 // Register collaborative room chat Socket.IO handlers
 registerChatSocket(io);
-
-// Register collaborative Gemini AI Socket.IO handlers
-registerGeminiSocket(io);
 
 io.on('connection', (socket) => {
     const userId = socket.user?.userId || socket.user?.id;

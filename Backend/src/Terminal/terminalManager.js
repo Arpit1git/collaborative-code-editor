@@ -1,4 +1,3 @@
-
 /**
  * terminalManager.js
  * Manages interactive Docker pseudo-terminals keyed by roomId.
@@ -10,54 +9,53 @@ import path from 'path';
 import pty from 'node-pty';
 import { getLanguageConfig } from './commandBuilder.js';
 
-
 const spawnPty = pty.spawn || pty.default?.spawn || pty;
 
 class TerminalManager {
 
-       constructor(){
-           // Map: roomId -> { ptyProcess, jobDir, timeoutTimer, history }
-           this.activeSession = new Map();
-           // Map: roomId -> string (stores terminal output even after container exits)
-           this.roomHistory = new Map();
-           this.Session_TimeOut = 5*60*1000;
-       }
+    constructor() {
+        // Map: roomId -> { ptyProcess, jobDir, timeoutTimer, history }
+        this.activeSession = new Map();
+        // Map: roomId -> string (stores terminal output even after container exits)
+        this.roomHistory = new Map();
+        this.Session_TimeOut = 5 * 60 * 1000;
+    }
 
-        // Spawns an interactive Docker container for a collaborative room
-     
-       isRoomRunning(roomId){
-              return this.activeSession.has(roomId);
-       }
+    // Spawns an interactive Docker container for a collaborative room
+    isRoomRunning(roomId) {
+        if (!roomId) return false;
+        const strId = roomId.toString();
+        return this.activeSession.has(strId) || this.activeSession.has(roomId);
+    }
 
-       clearHistory(roomId) {
-           this.roomHistory.set(roomId, "");
-       }
+    clearHistory(roomId) {
+        if (!roomId) return;
+        this.roomHistory.set(roomId.toString(), "");
+    }
 
-       async createSession({roomId,language,content,onData,onExit})
-       {
+    async createSession({ roomId, language, content, onData, onExit }) {
+        const roomKey = (roomId || 'default_room').toString();
 
-              if(this.isRoomRunning(roomId))
-              {
-                     throw new Error("Code is already running in this room. Please wait or stop the current execution.")
-              }
+        if (this.isRoomRunning(roomKey)) {
+            throw new Error("Code is already running in this room. Please wait or stop the current execution.");
+        }
 
-              // Reset old history for a brand new run
-              this.clearHistory(roomId);
+        // Reset old history for a brand new run
+        this.clearHistory(roomKey);
 
-              const {fileName,command} = getLanguageConfig(language,content);
+        const { fileName, command } = getLanguageConfig(language, content);
 
-              const jobDir = path.resolve(process.cwd(), "temp_job", `roomId_${roomId}`);
+        const jobDir = path.resolve(process.cwd(), "temp_job", `roomId_${roomKey}`);
 
-              await fs.mkdir(jobDir, { recursive: true });
+        await fs.mkdir(jobDir, { recursive: true });
 
-              const filePath = path.join(jobDir, fileName);
-              await fs.writeFile(filePath, content || "", 'utf-8');
+        const filePath = path.join(jobDir, fileName);
+        await fs.writeFile(filePath, content || "", 'utf-8');
 
-              
-              console.log(`[TerminalManager] Spawning Docker for Room "${roomId}" with language "${language}"...`);
-        // 5. Construct Docker interactive run arguments
-             const dockerArgs = 
-             [
+        console.log(`[TerminalManager] Spawning Docker for Room "${roomKey}" with language "${language}"...`);
+
+        // Construct Docker interactive run arguments
+        const dockerArgs = [
             'run',
             '-it',                  // Allocate pseudo-TTY & keep stdin open
             '--rm',                 // Automatically clean up container on exit
@@ -67,98 +65,98 @@ class TerminalManager {
             '--network', 'none',    // Security: Disallow outbound internet access
             '-v', `${jobDir}:/app`, // Mount host temp directory to container /app
             '-w', '/app',           // Set working directory inside container
-            'code-sandbox',         // Your existing Docker image
+            'code-sandbox',         // Your Docker image
             ...command
-             ];
+        ];
 
-          let ptyProcess;
-          try {
-              // Wrap the synchronous spawnPty in a try-catch to prevent fatal server crashes
-              ptyProcess = spawnPty('docker', dockerArgs, {
+        let ptyProcess;
+        try {
+            // Wrap the synchronous spawnPty in a try-catch to prevent fatal server crashes
+            ptyProcess = spawnPty('docker', dockerArgs, {
                 name: 'xterm-256color',
                 cols: 80,
                 rows: 24,
                 cwd: jobDir,
-                // Pass a clean environment or minimal required variables instead of the full process.env
-                env: { PATH: process.env.PATH } 
-              });
-          } catch (spawnError) {
-              console.error(`[TerminalManager] Fatal error spawning node-pty for room ${roomId}:`, spawnError);
-              // Clean up the directory since the process failed to start
-              await this.cleanupDisk(jobDir);
-              throw new Error(`Failed to start terminal process: ${spawnError.message}`);
-          }
+                env: { PATH: process.env.PATH }
+            });
+        } catch (spawnError) {
+            console.error(`[TerminalManager] Fatal error spawning node-pty for room ${roomKey}:`, spawnError);
+            await this.cleanupDisk(jobDir);
+            throw new Error(`Failed to start terminal process: ${spawnError.message}`);
+        }
 
-         // 7. Auto-cleanup timer (kills infinite loops / abandoned runs)
-         const timeoutTimer = setTimeout(()=>{
-               console.warn(`[TerminalManager] Room "${roomId}" exceeded max execution time. Terminating...`);
-               if (onData) onData("\r\n\x1b[31m[Execution Timed Out (5 min limit)]\x1b[0m\r\n");
-               this.killSession(roomId);
-         },this.Session_TimeOut);
-         
+        // Auto-cleanup timer (kills infinite loops / abandoned runs)
+        const timeoutTimer = setTimeout(() => {
+            console.warn(`[TerminalManager] Room "${roomKey}" exceeded max execution time. Terminating...`);
+            if (onData) onData("\r\n\x1b[31m[Execution Timed Out (5 min limit)]\x1b[0m\r\n");
+            this.killSession(roomKey);
+        }, this.Session_TimeOut);
 
-          // 8. Register Session in Map
+        // Register Session in Map
+        this.activeSession.set(roomKey, {
+            ptyProcess,
+            jobDir,
+            timeoutTimer,
+            history: ""
+        });
 
-         this.activeSession.set(roomId,{
-              ptyProcess,
-              jobDir,
-              timeoutTimer,
-              history:"",
-         });
+        if (ptyProcess.on) {
+            ptyProcess.on('error', (err) => {
+                console.error(`[PTY Error in Room ${roomKey}]:`, err);
+                if (onData) onData(`\r\n\x1b[31m[System Error: Failed to start Docker process]\x1b[0m\r\n`);
+                this.killSession(roomKey);
+            });
+        }
 
-         if (ptyProcess.on) {
-              ptyProcess.on('error', (err) => {
-                  console.error(`[PTY Error in Room ${roomId}]:`, err);
-                  if (onData) onData(`\r\n\x1b[31m[System Error: Failed to start Docker process]\x1b[0m\r\n`);
-                  this.killSession(roomId);
-              });
-          }
+        // Stream container output to callback
+        ptyProcess.onData((data) => {
+            const prevHistory = this.roomHistory.get(roomKey) || "";
+            this.roomHistory.set(roomKey, (prevHistory + data).slice(-50000));
 
-          // 9. Stream container output to callback
+            const session = this.activeSession.get(roomKey);
+            if (session) {
+                session.history = (session.history + data).slice(-20000);
+            }
 
-          ptyProcess.onData((data)=>{
-               // Persist output to room history (capped at 50,000 characters)
-               const prevHistory = this.roomHistory.get(roomId) || "";
-               this.roomHistory.set(roomId, (prevHistory + data).slice(-50000));
+            if (onData) onData(data);
+        });
 
-               const session = this.activeSession.get(roomId);
-               if(session)
-               {
-                      session.history = (session.history + data).slice(-20000);
-               }
+        // Handle container exit
+        ptyProcess.onExit(({ exitCode }) => {
+            console.log(`[TerminalManager] Process in Room "${roomKey}" exited with code: ${exitCode}`);
+            this.cleanupDisk(jobDir);
+            this.activeSession.delete(roomKey);
+            clearTimeout(timeoutTimer);
+            if (onExit) onExit(exitCode);
+        });
 
-                if (onData) onData(data);
-          });
+        return ptyProcess;
+    }
 
-           // 10. Handle container exit
+    // Forwards keystrokes from any collaborator in the room to Docker
+    handleInput(roomId, data) {
+        const roomKey = (roomId || '').toString();
+        let session = this.activeSession.get(roomKey);
+        
+        // Robust fallback: if room IDs had a slight mismatch (e.g. child fileId vs parent projectId), route to active session
+        if (!session && this.activeSession.size === 1) {
+            session = this.activeSession.values().next().value;
+        }
 
-           ptyProcess.onExit(({exitCode})=>{
-              console.log(`[TerminalManager] Process in Room "${roomId}" exited with code: ${exitCode}`);
-              this.cleanupDisk(jobDir);
-              this.activeSession.delete(roomId);
-              clearTimeout(timeoutTimer);
-             if (onExit) onExit(exitCode);
-           })
+        if (session?.ptyProcess) {
+            session.ptyProcess.write(data);
+        }
+    }
 
-           return ptyProcess;
-       }
+    // Synchronizes terminal dimensions (cols & rows) to Docker via SIGWINCH
+    handleResize(roomId, { cols, rows }) {
+        const roomKey = (roomId || '').toString();
+        let session = this.activeSession.get(roomKey);
+        
+        if (!session && this.activeSession.size === 1) {
+            session = this.activeSession.values().next().value;
+        }
 
-       //   Forwards keystrokes from any collaborator in the room to Docker
-
-
-      handleInput(roomId,data)
-      {
-
-           const session = this.activeSession.get(roomId);
-           if(session?.ptyProcess)
-           {
-               session.ptyProcess.write(data);
-           }
-      }
-
-     //   Synchronizes terminal dimensions (cols & rows) to Docker via SIGWINCH
-      handleResize(roomId, { cols, rows }) {
-        const session = this.activeSession.get(roomId);
         if (session?.ptyProcess && cols && rows) {
             try {
                 session.ptyProcess.resize(Number(cols), Number(rows));
@@ -168,60 +166,52 @@ class TerminalManager {
         }
     }
 
-      //  Retrieves recent terminal output history for newly joined collaborators
-       getHistory(roomId)
-       {
-              return this.roomHistory.get(roomId) || this.activeSession.get(roomId)?.history || "";
-       }
+    // Retrieves recent terminal output history for newly joined collaborators
+    getHistory(roomId) {
+        const roomKey = (roomId || '').toString();
+        return this.roomHistory.get(roomKey) || this.activeSession.get(roomKey)?.history || "";
+    }
 
+    // Terminates the active container for a room and frees all resources
+    killSession(roomId) {
+        const roomKey = (roomId || '').toString();
+        let session = this.activeSession.get(roomKey);
+        let actualKey = roomKey;
 
-      // Terminates the active container for a room and frees all resources
-
-       killSession(roomId)
-       {
-               const session = this.activeSession.get(roomId);
-
-               if(!session)
-               {
-                     return false;
-               }
-
-               console.log(`[TerminalManager] Manually killing session for Room "${roomId}"`);
-
-               clearTimeout(session.timeoutTimer);
-
-              // Kill the PTY process (which terminates Docker)
-
-              try {
-                     session.ptyProcess.kill();
-              } catch (error) {
-                      console.error(`[TerminalManager] Kill process error:`, error.message);
-              }
-
-              // Clean up directory
-              
-              this.cleanupDisk(session.jobDir);
-              this.activeSession.delete(roomId) ;
-              return true;
-
-             
-       }
-
-        //  Deletes temporary job files from host disk
-
-
-        async cleanupDisk(jobDir)
-        {
-            try {
-                await fs.rm(jobDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 150 });
-            } catch (error) {
-                // Ignore if locked momentarily
-            }
+        if (!session && this.activeSession.size === 1) {
+            const [key, value] = this.activeSession.entries().next().value;
+            session = value;
+            actualKey = key;
         }
 
-       
+        if (!session) {
+            return false;
+        }
+
+        console.log(`[TerminalManager] Manually killing session for Room "${actualKey}"`);
+
+        clearTimeout(session.timeoutTimer);
+
+        // Kill the PTY process (which terminates Docker)
+        try {
+            session.ptyProcess.kill();
+        } catch (error) {
+            console.error(`[TerminalManager] Kill process error:`, error.message);
+        }
+
+        this.cleanupDisk(session.jobDir);
+        this.activeSession.delete(actualKey);
+        return true;
+    }
+
+    // Deletes temporary job files from host disk
+    async cleanupDisk(jobDir) {
+        try {
+            await fs.rm(jobDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 150 });
+        } catch (error) {
+            // Ignore if locked momentarily
+        }
+    }
 }
-
-
 
 export const terminalManager = new TerminalManager();
