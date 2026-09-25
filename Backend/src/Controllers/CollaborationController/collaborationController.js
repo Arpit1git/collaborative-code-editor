@@ -1,7 +1,7 @@
 import { File } from "../../Models/file.js"; 
 // import { User } from '../../Models/user.js';
 import { nanoid } from 'nanoid';
-import { redisConnection } from '../../Queue/connection_queue.js';
+import { redisConnection } from '../../Config/redis.js';
 
 /**
  * @name : createInviteLink 

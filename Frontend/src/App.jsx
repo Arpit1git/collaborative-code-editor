@@ -6,8 +6,6 @@ import { useAuth } from "./features/auth/Context/AuthContext";
 const LoginPage = lazy(() => import("./features/auth/Components/Login.jsx").then(module => ({ default: module.LoginPage })));
 const SignupPage = lazy(() => import("./features/auth/Components/SignUp.jsx").then(module => ({ default: module.SignupPage })));
 
-
-const Editor = lazy(() => import("./features/Workspace/Editor.jsx").then(module => ({ default: module.Editor })));
 const Dashboard = lazy(() => import("./dashboard/Dashboard.jsx"));
 const Ide = lazy(() => import("./dashboard/ide.jsx"));
 const JoinHandler = lazy(() => import("./dashboard/JoinHandler.jsx"));
@@ -29,11 +27,6 @@ export default function App() {
                 <Route 
                     path="/dashboard" 
                     element={isAuthenticated ? <Dashboard /> : <Navigate to="/login" replace />} 
-                />
-              
-                <Route 
-                    path="/workspace" 
-                    element={isAuthenticated ? <Editor /> : <Navigate to="/login" replace />} 
                 />
 
                 <Route 

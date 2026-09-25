@@ -20,11 +20,13 @@ export const generateTokensAndSetCookie = async (userId,res)=>{
      serachUser.refreshToken = refreshToken;
      await serachUser.save();
 
-   const  cookieOptions = {
-         httpOnly:true,
-         sameSite:"strict",
+    const isProduction = process.env.NODE_ENV === 'production';
+    const cookieOptions = {
+         httpOnly: true,
+         sameSite: isProduction ? "none" : "lax",
+         secure: isProduction,
          maxAge: 7 * 24 * 60 * 60 * 1000,
-    }
+    };
 
     res.cookie("refreshToken", refreshToken, cookieOptions);
      

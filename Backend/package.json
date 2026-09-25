@@ -5,8 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "node index.js",
-    "start": "nodemon --ignore temp_job/ index.js",
+    "dev": "nodemon --ignore temp_job/ index.js",
+    "start": "node index.js",
     "ignore": "temp_job/*"
   },
   "keywords": [],

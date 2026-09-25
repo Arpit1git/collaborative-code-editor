@@ -1,6 +1,6 @@
 /**
  * terminalManager.js
- * Manages interactive Docker pseudo-terminals keyed by roomId.
+ * Manages interactive pseudo-terminals keyed by roomId.
  * Acts as a single-execution lock per collaborative room.
  */
 
@@ -16,12 +16,12 @@ class TerminalManager {
     constructor() {
         // Map: roomId -> { ptyProcess, jobDir, timeoutTimer, history }
         this.activeSession = new Map();
-        // Map: roomId -> string (stores terminal output even after container exits)
+        // Map: roomId -> string (stores terminal output even after process exits)
         this.roomHistory = new Map();
         this.Session_TimeOut = 5 * 60 * 1000;
     }
 
-    // Spawns an interactive Docker container for a collaborative room
+    // Checks if a collaborative room currently has an active execution
     isRoomRunning(roomId) {
         if (!roomId) return false;
         const strId = roomId.toString();
@@ -52,32 +52,21 @@ class TerminalManager {
         const filePath = path.join(jobDir, fileName);
         await fs.writeFile(filePath, content || "", 'utf-8');
 
-        console.log(`[TerminalManager] Spawning Docker for Room "${roomKey}" with language "${language}"...`);
+        console.log(`[TerminalManager] Executing process for Room "${roomKey}" with language "${language}"...`);
 
-        // Construct Docker interactive run arguments
-        const dockerArgs = [
-            'run',
-            '-it',                  // Allocate pseudo-TTY & keep stdin open
-            '--rm',                 // Automatically clean up container on exit
-            '--memory=256m',        // Memory cap (prevent crashing host)
-            '--cpus=1.0',           // CPU cap
-            '--pids-limit=100',     // Prevent fork bombs
-            '--network', 'none',    // Security: Disallow outbound internet access
-            '-v', `${jobDir}:/app`, // Mount host temp directory to container /app
-            '-w', '/app',           // Set working directory inside container
-            'code-sandbox',         // Your Docker image
-            ...command
-        ];
+        const isWin = process.platform === 'win32';
+        const shell = isWin ? (process.env.ComSpec || 'cmd.exe') : 'bash';
+        const shellArgs = isWin ? ['/c', command] : ['-c', command];
 
         let ptyProcess;
         try {
-            // Wrap the synchronous spawnPty in a try-catch to prevent fatal server crashes
-            ptyProcess = spawnPty('docker', dockerArgs, {
+            // Spawn shell directly in the isolated jobDir
+            ptyProcess = spawnPty(shell, shellArgs, {
                 name: 'xterm-256color',
                 cols: 80,
                 rows: 24,
                 cwd: jobDir,
-                env: { PATH: process.env.PATH }
+                env: { ...process.env, PATH: process.env.PATH }
             });
         } catch (spawnError) {
             console.error(`[TerminalManager] Fatal error spawning node-pty for room ${roomKey}:`, spawnError);
@@ -103,7 +92,7 @@ class TerminalManager {
         if (ptyProcess.on) {
             ptyProcess.on('error', (err) => {
                 console.error(`[PTY Error in Room ${roomKey}]:`, err);
-                if (onData) onData(`\r\n\x1b[31m[System Error: Failed to start Docker process]\x1b[0m\r\n`);
+                if (onData) onData(`\r\n\x1b[31m[System Error: Failed to start execution process]\x1b[0m\r\n`);
                 this.killSession(roomKey);
             });
         }
@@ -121,7 +110,7 @@ class TerminalManager {
             if (onData) onData(data);
         });
 
-        // Handle container exit
+        // Handle process exit
         ptyProcess.onExit(({ exitCode }) => {
             console.log(`[TerminalManager] Process in Room "${roomKey}" exited with code: ${exitCode}`);
             this.cleanupDisk(jobDir);
@@ -133,12 +122,12 @@ class TerminalManager {
         return ptyProcess;
     }
 
-    // Forwards keystrokes from any collaborator in the room to Docker
+    // Forwards keystrokes from any collaborator in the room to the running process
     handleInput(roomId, data) {
         const roomKey = (roomId || '').toString();
         let session = this.activeSession.get(roomKey);
         
-        // Robust fallback: if room IDs had a slight mismatch (e.g. child fileId vs parent projectId), route to active session
+        // Fallback: if room IDs had a slight mismatch (e.g. child fileId vs parent projectId), route to active session
         if (!session && this.activeSession.size === 1) {
             session = this.activeSession.values().next().value;
         }
@@ -148,7 +137,7 @@ class TerminalManager {
         }
     }
 
-    // Synchronizes terminal dimensions (cols & rows) to Docker via SIGWINCH
+    // Synchronizes terminal dimensions (cols & rows) via SIGWINCH
     handleResize(roomId, { cols, rows }) {
         const roomKey = (roomId || '').toString();
         let session = this.activeSession.get(roomKey);
@@ -172,7 +161,7 @@ class TerminalManager {
         return this.roomHistory.get(roomKey) || this.activeSession.get(roomKey)?.history || "";
     }
 
-    // Terminates the active container for a room and frees all resources
+    // Terminates the active process for a room and frees all resources
     killSession(roomId) {
         const roomKey = (roomId || '').toString();
         let session = this.activeSession.get(roomKey);
@@ -192,7 +181,6 @@ class TerminalManager {
 
         clearTimeout(session.timeoutTimer);
 
-        // Kill the PTY process (which terminates Docker)
         try {
             session.ptyProcess.kill();
         } catch (error) {

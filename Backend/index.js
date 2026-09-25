@@ -17,7 +17,6 @@ import connectDb from "./src/Config/Mongo_db.js";
 import fileRouter from "./src/Routes/CRUD_Op_File_Routes/crudop_file_routes.js";
 import authRouter from './src/Routes/Auth_Routes/authRoute.js';
 import collaborationRouter from './src/Routes/collabrateRoute/collabrationRoute.js';
-import './src/Queue/codeWorker.js';
 
 // import { Logger } from '@hocuspocus/extension-logger';
 

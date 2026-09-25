@@ -1,7 +1,7 @@
 /**
  * commandBuilder.js
  * Translates programming language identifiers into the correct file extension,
- * file naming convention, and executable Docker command array.
+ * file naming convention, and executable shell command.
  */
 
 export const getLanguageConfig = (language, content = "") => {
@@ -13,7 +13,7 @@ export const getLanguageConfig = (language, content = "") => {
             return {
                 fileName: "code.py",
                 // -u forces unbuffered stdout/stderr, guaranteeing prompt flushes
-                command: ["python3", "-u", "code.py"]
+                command: "python3 -u code.py"
             };
 
         case "javascript":
@@ -21,26 +21,23 @@ export const getLanguageConfig = (language, content = "") => {
         case "node":
             return {
                 fileName: "code.js",
-                command: ["node", "code.js"]
+                command: "node code.js"
             };
 
         case "cpp":
         case "c++":
             return {
                 fileName: "code.cpp",
-                // Compile binary to container-isolated /tmp to avoid ETXTBUSY / "Text file busy" on mounted host volumes
-                command: ["sh", "-c", "rm -f /tmp/a.out && g++ code.cpp -o /tmp/a.out && /tmp/a.out"]
+                command: "g++ code.cpp -o output && ./output"
             };
 
         case "c":
             return {
                 fileName: "code.c",
-                command: ["sh", "-c", "rm -f /tmp/a.out && gcc code.c -o /tmp/a.out && /tmp/a.out"]
+                command: "gcc code.c -o output && ./output"
             };
 
         case "java": {
-            // BUG FIX: In Java, if a class is declared "public class X",
-            // the file MUST be named "X.java", otherwise the compiler crashes!
             let fileName = "Main.java";
             const match = content.match(/public\s+class\s+([A-Za-z0-9_]+)/);
             if (match && match[1]) {
@@ -50,7 +47,7 @@ export const getLanguageConfig = (language, content = "") => {
             }
             return {
                 fileName,
-                command: ["java", fileName]
+                command: `java ${fileName}`
             };
         }
 

@@ -217,9 +217,11 @@ export const logout = async(req,res)=>{
         searchUser.refreshToken=null;
         await searchUser.save();
 
+        const isProduction = process.env.NODE_ENV === 'production';
         const cookieOptions = {
             httpOnly: true,
-            sameSite: "strict"
+            sameSite: isProduction ? "none" : "lax",
+            secure: isProduction
         };
 
         res.clearCookie("refreshToken", cookieOptions);
