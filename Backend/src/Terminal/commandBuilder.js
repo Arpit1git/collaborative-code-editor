@@ -6,14 +6,15 @@
 
 export const getLanguageConfig = (language, content = "") => {
     const lang = (language || "").toLowerCase().trim();
+    const isWin = process.platform === 'win32';
 
     switch (lang) {
         case "python":
         case "py":
             return {
                 fileName: "code.py",
-                // -u forces unbuffered stdout/stderr, guaranteeing prompt flushes
-                command: "python3 -u code.py"
+                // Windows uses 'python', Linux uses 'python3'
+                command: isWin ? "python -u code.py" : "python3 -u code.py"
             };
 
         case "javascript":
@@ -28,13 +29,17 @@ export const getLanguageConfig = (language, content = "") => {
         case "c++":
             return {
                 fileName: "code.cpp",
-                command: "g++ code.cpp -o output && ./output"
+                command: isWin 
+                    ? "g++ code.cpp -o output.exe && output.exe" 
+                    : "g++ code.cpp -o output && ./output"
             };
 
         case "c":
             return {
                 fileName: "code.c",
-                command: "gcc code.c -o output && ./output"
+                command: isWin 
+                    ? "gcc code.c -o output.exe && output.exe" 
+                    : "gcc code.c -o output && ./output"
             };
 
         case "java": {

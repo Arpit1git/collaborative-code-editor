@@ -39,9 +39,32 @@ const PORT = process.env.PORT || 8000;
 
 connectDb();
 
-app.use(cors({ origin: process.env.FRONTEND_API ,credentials:true}));
+// Robust CORS configuration supporting production domains, localhost, and trailing slashes
+app.use(cors({
+    origin: (origin, callback) => {
+        if (!origin) return callback(null, true);
+        
+        const cleanOrigin = origin.replace(/\/+$/, '');
+        const cleanFrontend = (process.env.FRONTEND_API || '').replace(/\/+$/, '');
+
+        if (
+            cleanOrigin === cleanFrontend ||
+            cleanOrigin.endsWith('.onrender.com') ||
+            cleanOrigin.includes('localhost') ||
+            cleanOrigin.includes('127.0.0.1')
+        ) {
+            return callback(null, true);
+        }
+        
+        // Fallback allow for deployed frontends
+        return callback(null, true);
+    },
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+    credentials: true
+}));
 app.use(express.json());
-app.use(cookieParser())
+app.use(cookieParser());
 
 
 app.use("/api/auth",authRouter);

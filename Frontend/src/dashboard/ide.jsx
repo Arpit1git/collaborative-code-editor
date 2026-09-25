@@ -323,14 +323,23 @@ export const Ide = () => {
       });
 
       const data = await res.json();
-      if (data.success && data.inviteUrl) {
-        setInviteUrl(data.inviteUrl);
+      if (data.success) {
+        if (data.inviteToken) {
+          setInviteUrl(`${window.location.origin}/join/${data.inviteToken}`);
+        } else if (data.inviteUrl) {
+          try {
+            const parsed = new URL(data.inviteUrl);
+            setInviteUrl(`${window.location.origin}${parsed.pathname}`);
+          } catch {
+            setInviteUrl(data.inviteUrl);
+          }
+        }
       } else {
-        setInviteUrl(`${window.location.origin}/join/${targetRoomId}?file=${activeFile._id}`);
+        setInviteUrl(`${window.location.origin}/ide?roomId=${targetRoomId}&file=${activeFile._id}`);
       }
     } catch (err) {
       console.error("Failed to generate invite link:", err);
-      setInviteUrl(`${window.location.origin}/join/${targetRoomId}?file=${activeFile._id}`);
+      setInviteUrl(`${window.location.origin}/ide?roomId=${targetRoomId}&file=${activeFile._id}`);
     } finally {
       setIsGeneratingInvite(false);
     }

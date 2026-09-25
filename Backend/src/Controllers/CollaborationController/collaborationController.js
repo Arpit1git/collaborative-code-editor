@@ -70,7 +70,8 @@ export const createInviteLink = async (req, res) => {
 
         return res.status(200).json({
             success: true,
-            inviteUrl: `${process.env.FRONTEND_API}/join/${inviteToken}`
+            inviteToken,
+            inviteUrl: `${(process.env.FRONTEND_API || 'http://localhost:5173').replace(/\/+$/, '')}/join/${inviteToken}`
         });
 
     } catch (error) {
