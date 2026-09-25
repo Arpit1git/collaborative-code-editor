@@ -1,12 +1,15 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../Context/AuthContext";
 
 export function SignupPage() {
     const { signup } = useAuth();
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const [error, setError] = useState(null);
     const [pending, setPending] = useState(false);
+
+    const redirectUrl = searchParams.get("redirect") || "/ide";
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -20,13 +23,17 @@ export function SignupPage() {
 
         try {
             await signup(userName, email, password);
-            navigate("/ide", { replace: true });
+            navigate(redirectUrl, { replace: true });
         } catch (err) {
             setError(err.message);
         } finally {
             setPending(false);
         }
     };
+
+    const loginLink = redirectUrl !== "/ide" 
+        ? `/login?redirect=${encodeURIComponent(redirectUrl)}` 
+        : "/login";
 
     return (
         <div className="flex justify-center items-center h-screen bg-gray-100">
@@ -41,7 +48,7 @@ export function SignupPage() {
                     {pending ? "Processing..." : "Sign Up"}
                 </button>
                 <p className="text-sm text-center mt-2">
-                    Already have an account? <Link to="/login" className="text-blue-500 hover:underline">Log in.</Link>
+                    Already have an account? <Link to={loginLink} className="text-blue-500 hover:underline">Log in.</Link>
                 </p>
             </form>
         </div>

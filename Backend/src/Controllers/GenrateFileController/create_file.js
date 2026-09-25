@@ -13,13 +13,16 @@ export const GetRootFileOrFolder = async (req,res)=>{
 
             const {userId} = req.user;
 
-            const searchRootFileAndFolder = await File.find({ owner: userId, parentId: null });
+            const searchRootFileAndFolder = await File.find({ 
+                $or: [
+                    { owner: userId }, 
+                    { collaborators: userId }, 
+                    { collabration: userId }
+                ], 
+                parentId: null 
+            });
             
-            console.log("\n");
-            
-            console.log("searchRootFileAndFolder :",searchRootFileAndFolder);
-
-            console.log("\n");
+            console.log("searchRootFileAndFolder count:", searchRootFileAndFolder.length);
             
              return res.status(200).json({
                 success:true,
@@ -45,18 +48,14 @@ export const GetRootFileOrFolder = async (req,res)=>{
 export const GetFilesInsideFolder = async (req,res)=>{
       try {
 
-         const {userId} = req.user;
          const {parentId} = req.params;
-
 
          if (!parentId) {
             return res.status(400).json({ success: false, message: "Parent ID is required" });
         }
 
-
          const searchFile = await File.find({
-                  parentId:parentId,
-                  owner:userId
+            parentId: parentId
          });
 
           

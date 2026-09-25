@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { 
   Folder, 
   FolderOpen, 
@@ -241,7 +242,10 @@ export const Left = ({ onSelectFile, activeFileId, triggerRootCreate, setTrigger
   const [rootCreationState, setRootCreationState] = useState(null);
   const [rootInputName, setRootInputName] = useState('');
 
-  // 1. Initial Load: Fetch Root Files & Folders from backend
+  // 1. Initial Load & Room-change Load: Fetch Root Files & Folders from backend
+  const [searchParams] = useSearchParams();
+  const queryRoomId = searchParams.get('roomId');
+
   useEffect(() => {
     const fetchRoots = async () => {
       try {
@@ -258,7 +262,21 @@ export const Left = ({ onSelectFile, activeFileId, triggerRootCreate, setTrigger
     if (accessToken) {
       fetchRoots();
     }
-  }, [accessToken]);
+  }, [accessToken, queryRoomId]);
+
+  // Auto-expand shared project folder when joining via invite URL
+  useEffect(() => {
+    if (queryRoomId && accessToken) {
+      setExpandedFolders(prev => ({ ...prev, [queryRoomId]: true }));
+      getFilesInsideFolder(queryRoomId, accessToken)
+        .then(children => {
+          setChildrenMap(prev => ({ ...prev, [queryRoomId]: children }));
+        })
+        .catch(err => {
+          console.error("Error auto-expanding shared folder:", err);
+        });
+    }
+  }, [queryRoomId, accessToken]);
 
   // Handle external trigger to create file or folder at root
   useEffect(() => {

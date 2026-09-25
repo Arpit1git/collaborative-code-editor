@@ -45,6 +45,13 @@ const fileSchema = new mongoose.Schema(
             }
         ],
 
+        collaborators:[
+            {
+                type:mongoose.Schema.Types.ObjectId,
+                ref:"User",
+            }
+        ],
+
         rootId:{
              type:mongoose.Schema.Types.ObjectId,
              ref:"File",

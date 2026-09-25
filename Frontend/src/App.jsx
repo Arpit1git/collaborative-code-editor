@@ -9,6 +9,7 @@ const SignupPage = lazy(() => import("./features/auth/Components/SignUp.jsx").th
 
 const Editor = lazy(() => import("./features/Workspace/Editor.jsx").then(module => ({ default: module.Editor })));
 const Ide = lazy(() => import("./dashboard/ide.jsx"));
+const JoinHandler = lazy(() => import("./dashboard/JoinHandler.jsx"));
 
 export default function App() {
 
@@ -34,6 +35,12 @@ export default function App() {
                     path="/ide" 
                     element={isAuthenticated ? <Ide /> : <Navigate to="/login" replace />} 
                 />
+
+                <Route
+                  path="/join/:token"
+                  element={<JoinHandler />} 
+                />
+                
             </Routes>
         </Suspense>
     );

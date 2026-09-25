@@ -11,6 +11,8 @@ import { WebSocketServer } from "ws";
 import mongoose from "mongoose";
 import { File } from "./src/Models/file.js";
 import {registerTerminalSocket} from './src/Socket/terminalSocket.js';
+import {registerChatSocket} from './src/Socket/chatSocket.js';
+import {registerGeminiSocket} from './src/Socket/geminiSocket.js';
 
 import connectDb from "./src/Config/Mongo_db.js";
 import fileRouter from "./src/Routes/CRUD_Op_File_Routes/crudop_file_routes.js";
@@ -160,6 +162,8 @@ const io = new SocketIOServer(server, {
     destroyUpgrade: false
 });
 
+app.set('io', io);
+
 io.use((socket, next) => {
    try {
         const token = socket.handshake.auth?.token;
@@ -188,8 +192,22 @@ io.use((socket, next) => {
 // Register interactive collaborative terminal Socket.IO handlers
 registerTerminalSocket(io);
 
+// Register collaborative room chat Socket.IO handlers
+registerChatSocket(io);
+
+// Register collaborative Gemini AI Socket.IO handlers
+registerGeminiSocket(io);
+
 io.on('connection', (socket) => {
-    console.log(`[Socket] User connected: ${socket.id}`);
+    const userId = socket.user?.userId || socket.user?.id;
+    if (userId) {
+        socket.join(`user:${userId}`);
+        socket.join(userId.toString());
+        console.log(`[Socket] User ${userId} (${socket.id}) connected & joined personal socket rooms`);
+    } else {
+        console.log(`[Socket] User connected: ${socket.id}`);
+    }
+
     socket.on('disconnect', (reason) => {
         console.log(`[Socket] User disconnected: ${socket.id} (${reason})`);
     });
