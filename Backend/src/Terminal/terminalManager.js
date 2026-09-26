@@ -90,11 +90,17 @@ class TerminalManager {
             jobDir,
             timeoutTimer,
             history: "",
-            totalOutputLength: 0
+            totalOutputLength: 0,
+            isExited: false
         });
 
         if (ptyProcess.on) {
             ptyProcess.on('error', (err) => {
+                const session = this.activeSession.get(roomKey);
+                // Ignore pipe close / EOF errors that happen after process has already started/exited
+                if (session?.isExited || (session && session.totalOutputLength > 0)) {
+                    return;
+                }
                 console.error(`[PTY Error in Room ${roomKey}]:`, err);
                 if (onData) onData(`\r\n\x1b[31m[System Error: Failed to start execution process]\x1b[0m\r\n`);
                 this.killSession(roomKey);
@@ -126,6 +132,13 @@ class TerminalManager {
         // Handle process exit
         ptyProcess.onExit(({ exitCode }) => {
             console.log(`[TerminalManager] Process in Room "${roomKey}" exited with code: ${exitCode}`);
+            const session = this.activeSession.get(roomKey);
+            if (session) {
+                session.isExited = true;
+            }
+            if (onData) {
+                onData(`\r\n\x1b[90m\r\n[Process completed with exit code ${exitCode}]\x1b[0m\r\n`);
+            }
             this.cleanupDisk(jobDir);
             this.activeSession.delete(roomKey);
             clearTimeout(timeoutTimer);
