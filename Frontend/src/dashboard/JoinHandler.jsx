@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../features/auth/Context/AuthContext.jsx';
 import { authFetch } from '../features/Workspace/api/fileapi.js';
+import { BACKEND_API } from '../Config/apiConfig.js';
 import { Loader2, AlertCircle, Sparkles, ArrowRight } from 'lucide-react';
 
 export default function JoinHandler() {
@@ -28,7 +29,7 @@ export default function JoinHandler() {
     // 3. Authenticated: Redeem the token with backend
     const redeemInvite = async () => {
       try {
-        const url = `${import.meta.env.VITE_BACKEND_API}/collab/join/${token}`;
+        const url = `${BACKEND_API}/collab/join/${token}`;
         const res = await authFetch(url, {
           method: 'POST'
         });

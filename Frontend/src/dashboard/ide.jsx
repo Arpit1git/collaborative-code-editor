@@ -28,6 +28,7 @@ import Right from './right.jsx';
 import { socket } from '../Config/socketClient.js';
 import { authFetch, getFileById } from '../features/Workspace/api/fileapi.js';
 import { useAuth } from '../features/auth/Context/AuthContext.jsx';
+import { BACKEND_API } from '../Config/apiConfig.js';
 
 export const Ide = () => {
   const editorRef = useRef(null);
@@ -83,7 +84,7 @@ export const Ide = () => {
   const fetchCollaborators = useCallback(async () => {
     if (!targetRoomId) return;
     try {
-      const url = `${import.meta.env.VITE_BACKEND_API}/collab/${targetRoomId}/collaborators`;
+      const url = `${BACKEND_API}/collab/${targetRoomId}/collaborators`;
       const res = await authFetch(url);
       const data = await res.json();
       if (data.success) {
@@ -313,7 +314,7 @@ export const Ide = () => {
     setIsGeneratingInvite(true);
 
     try {
-      const url = `${import.meta.env.VITE_BACKEND_API}/collab/invite`;
+      const url = `${BACKEND_API}/collab/invite`;
       const res = await authFetch(url, {
         method: 'POST',
         body: JSON.stringify({
@@ -364,7 +365,7 @@ export const Ide = () => {
     if (!targetRoomId || !targetUserId) return;
     setActionLoadingId(targetUserId);
     try {
-      const url = `${import.meta.env.VITE_BACKEND_API}/collab/${targetRoomId}/collaborators/${targetUserId}`;
+      const url = `${BACKEND_API}/collab/${targetRoomId}/collaborators/${targetUserId}`;
       const res = await authFetch(url, { method: 'DELETE' });
       const data = await res.json();
       if (data.success) {
@@ -386,7 +387,7 @@ export const Ide = () => {
 
     setActionLoadingId('leave');
     try {
-      const url = `${import.meta.env.VITE_BACKEND_API}/collab/${targetRoomId}/leave`;
+      const url = `${BACKEND_API}/collab/${targetRoomId}/leave`;
       const res = await authFetch(url, { method: 'POST' });
       const data = await res.json();
       if (data.success) {
@@ -414,7 +415,7 @@ export const Ide = () => {
 
     setActionLoadingId('destroy');
     try {
-      const url = `${import.meta.env.VITE_BACKEND_API}/collab/${targetRoomId}/destroy`;
+      const url = `${BACKEND_API}/collab/${targetRoomId}/destroy`;
       const res = await authFetch(url, { method: 'POST' });
       const data = await res.json();
       if (data.success) {

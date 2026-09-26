@@ -71,6 +71,14 @@ app.use("/api/auth",authRouter);
 app.use("/api/file", fileRouter);
 app.use("/api/collab", collaborationRouter);
 
+app.get("/api/health", (req, res) => {
+    res.status(200).json({ status: "ok", message: "Backend is healthy and live!" });
+});
+
+app.get("/", (req, res) => {
+    res.status(200).send("Collaborative Code Editor Backend is running.");
+});
+
 
 const hocuspocus = new Hocuspocus({
     // port: 8001

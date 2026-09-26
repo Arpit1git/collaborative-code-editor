@@ -3,6 +3,7 @@ import * as Y from 'yjs';
 import { HocuspocusProvider } from '@hocuspocus/provider';
 import { MonacoBinding } from 'y-monaco';
 import { useAuth } from '../../auth/Context/AuthContext';
+import { WS_API } from '../../../Config/apiConfig.js';
 
 const useCollabration = (editorRef, roomId, isReady) => {
   const { accessToken } = useAuth();
@@ -22,7 +23,7 @@ const useCollabration = (editorRef, roomId, isReady) => {
     const ydoc = new Y.Doc();
 
     const provider = new HocuspocusProvider({
-      url: import.meta.env.VITE_WS_API,
+      url: WS_API,
       name: roomId,
       document: ydoc,
       token: accessToken,

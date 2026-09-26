@@ -24,8 +24,6 @@ const userSchema = mongoose.Schema({
 
       refreshToken:{
         type:String,
-        unique:true,
-        sparse: true,
         default:null,
       }
 

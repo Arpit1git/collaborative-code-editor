@@ -1,3 +1,5 @@
+import { BACKEND_API } from '../../../Config/apiConfig.js';
+
 // ── AUTOMATIC TOKEN REFRESH & AUTH FETCH WRAPPER ──
 let isRefreshing = false;
 let refreshSubscribers = [];
@@ -36,7 +38,7 @@ export const authFetch = async (url, options = {}, customToken = null) => {
         if (!isRefreshing) {
             isRefreshing = true;
             try {
-                const refreshRes = await fetch(`${import.meta.env.VITE_BACKEND_API}/auth/refresh`, {
+                const refreshRes = await fetch(`${BACKEND_API}/auth/refresh`, {
                     method: "POST",
                     credentials: "include"
                 });
@@ -84,7 +86,7 @@ export const handleSaveFile = async (fileName, content, language, token = null) 
         }
 
         const payload = { fileName, content, language };
-        const url = `${import.meta.env.VITE_BACKEND_API}/file/create`;
+        const url = `${BACKEND_API}/file/create`;
 
         const res = await authFetch(url, {
             method: "POST",
@@ -104,7 +106,7 @@ export const handleSaveFile = async (fileName, content, language, token = null) 
 
 export const getFileById = async (id, token = null) => {
     try {
-        const url = `${import.meta.env.VITE_BACKEND_API}/file/${id}`;
+        const url = `${BACKEND_API}/file/${id}`;
         const res = await authFetch(url, { method: "GET" }, token);
 
         const data = await res.json();
@@ -124,7 +126,7 @@ export const runFile = async (content, language, customInput = "", token = null)
             throw new Error("Content and Language Required");
         }
 
-        const url = `${import.meta.env.VITE_BACKEND_API}/file/compile`;
+        const url = `${BACKEND_API}/file/compile`;
         const res = await authFetch(url, {
             method: "POST",
             body: JSON.stringify({ content, language, customInput }),
@@ -143,7 +145,7 @@ export const runFile = async (content, language, customInput = "", token = null)
 
 export const getRootFilesAndFolders = async (token = null) => {
     try {
-        const url = `${import.meta.env.VITE_BACKEND_API}/file/root`;
+        const url = `${BACKEND_API}/file/root`;
         const res = await authFetch(url, { method: "GET" }, token);
         const data = await res.json();
         
@@ -159,7 +161,7 @@ export const getRootFilesAndFolders = async (token = null) => {
 
 export const getFilesInsideFolder = async (parentId, token = null) => {
     try {
-        const url = `${import.meta.env.VITE_BACKEND_API}/file/folder/${parentId}`;
+        const url = `${BACKEND_API}/file/folder/${parentId}`;
         const res = await authFetch(url, { method: "GET" }, token);
         const data = await res.json();
         if (!res.ok) {
@@ -174,7 +176,7 @@ export const getFilesInsideFolder = async (parentId, token = null) => {
 
 export const createFileOrFolder = async ({ name, isFolder, parentId = null, language = "" }, token = null) => {
     try {
-        const url = `${import.meta.env.VITE_BACKEND_API}/file/create`;
+        const url = `${BACKEND_API}/file/create`;
         const res = await authFetch(url, {
             method: "POST",
             body: JSON.stringify({ name, isFolder, parentId, language })

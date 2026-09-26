@@ -14,81 +14,89 @@ import jwt from 'jsonwebtoken';
 
 export const userSignUp = async (req,res)=>{
     try {
-        const {userName,email,password} =  req.body;
+        let {userName,email,password} = req.body;
 
-        if( !userName?.trim() || !email?.trim() || !password?.trim()){
-              
+        if(!userName?.trim() || !email?.trim() || !password?.trim()){
             return res.status(400).json({
                  success:false,
-                 message:"All credential Required",
-            })
+                 message:"All credentials are required",
+            });
         }
 
-        const findUser = await User.findOne({ $or: [{ userName }, { email }] });
+        userName = userName.trim();
+        email = email.toLowerCase().trim();
+
+        const findUser = await User.findOne({ 
+            $or: [
+                { userName: new RegExp(`^${userName}$`, 'i') }, 
+                { email: email }
+            ] 
+        });
 
         if(findUser){
              return res.status(400).json({
                 success:false,
-                message:"User already exist this credential...."
-             })
+                message:"A user with this username or email already exists. Please log in."
+             });
         }
 
        const saltRound = 10;
        const hasedPassword = await bcrypt.hash(password,saltRound);
 
-      
-     const newUser = await User.create({
+       const newUser = await User.create({
           userName,
           email,
           password:hasedPassword
        });
 
-
-        const accessToken = await  generateTokensAndSetCookie(newUser._id,res);
+       const accessToken = await generateTokensAndSetCookie(newUser._id,res);
 
        return res.status(201).json({
         success:true,
-        message:"Account Created Successfully........",
+        message:"Account Created Successfully!",
         accessToken
-       })
-
-        
+       });
 
     } catch (error) {
-        console.log("Erroe Occur While  userSignUp:",error.message);
+        console.error("Error in userSignUp:", error);
+        if (error.code === 11000) {
+            return res.status(400).json({
+                success: false,
+                message: "A user with this username or email already exists. Please log in."
+            });
+        }
         return res.status(500).json({
             success:false,
-            message:"Server Error ):"
-        })
+            message: error.message || "Server Error"
+        });
     }
 } 
 
 /**
  * @name loginUser
  * @description Authenticates an existing user, verifies their password, and issues 
- * a fresh set of access and refresh tokens. (Note: Token generation logic was added here 
- * because logging in requires the exact same token delivery as signing up).
+ * a fresh set of access and refresh tokens.
  */
 
 export const loginUser = async(req,res)=>{
       try {
-
-         const {email,password} =  req.body;
+         let {email,password} = req.body;
 
         if (!email || email.trim() === "" || !password || password.trim() === "") {
-        return res.status(400).json({
-        success: false,
-        message: "All credentials required",
-      });
-}
+            return res.status(400).json({
+                success: false,
+                message: "All credentials required",
+            });
+        }
 
-        const serachUser = await User.findOne({"email":email});
+        email = email.toLowerCase().trim();
+        const serachUser = await User.findOne({ email: new RegExp(`^${email}$`, 'i') });
 
         if (!serachUser){
              return res.status(404).json({
                 success:false,
-                message:"User Not Found );"
-             })
+                message:"User Not Found. Please check your email or sign up."
+             });
         }
 
         const isMatch = await bcrypt.compare(password,serachUser.password);
@@ -96,24 +104,24 @@ export const loginUser = async(req,res)=>{
         if(!isMatch){
             return res.status(401).json({
                 success:false,
-                message:" check your email and password  ]:"
-            })
+                message:"Check your email and password"
+            });
         }
 
         const accessToken = await generateTokensAndSetCookie(serachUser._id,res);
 
         return res.status(200).json({
             success:true,
-            message:"User Sucessfully Logined...",
+            message:"User Successfully Logged In",
             accessToken:accessToken
-        })
+        });
         
       } catch (error) {
-         console.log("Erroe Occur While  loginUser:",error.message);
+         console.error("Error in loginUser:", error);
          return res.status(500).json({
             success:false,
-            message:"Server Error ):"
-         })
+            message: error.message || "Server Error"
+         });
       }
 }
 

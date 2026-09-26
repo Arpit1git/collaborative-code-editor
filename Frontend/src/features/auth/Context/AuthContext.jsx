@@ -1,11 +1,11 @@
 
 import { useEffect } from "react";
 import { createContext,use,useState,useCallback } from "react";
-
+import { BACKEND_API } from "../../../Config/apiConfig.js";
 
 const AuthContext = createContext(null);
 
-const API = import.meta.env.VITE_BACKEND_API
+const API = BACKEND_API;
 
 export  function  AuthProvider({children}){
 
