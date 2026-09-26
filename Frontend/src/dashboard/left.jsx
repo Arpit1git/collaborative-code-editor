@@ -8,15 +8,18 @@ import {
   FolderPlus, 
   ChevronRight, 
   ChevronDown,
-  Loader2
+  Loader2,
+  Trash2
 } from 'lucide-react';
 import { 
   getRootFilesAndFolders, 
   getFilesInsideFolder, 
   createFileOrFolder,
+  deleteFileOrFolder,
   getFileById 
 } from '../features/Workspace/api/fileapi.js';
 import { useAuth } from '../features/auth/Context/AuthContext.jsx';
+import DeleteConfirmModal from './DeleteConfirmModal.jsx';
 
 // Helper to extract extension and map to Monaco language
 export const parseFileInfo = (fullName) => {
@@ -57,6 +60,7 @@ export const FolderItem = ({
   onToggleFolder, 
   onCreateItem,
   onSelectFile,
+  onDeleteItem,
   activeFileId
 }) => {
   const [creationState, setCreationState] = useState(null);
@@ -144,6 +148,18 @@ export const FolderItem = ({
           >
             <FolderPlus size={13} />
           </button>
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDeleteItem && onDeleteItem(item);
+            }}
+            className="p-0.5 hover:text-red-400 hover:bg-red-500/10 rounded transition cursor-pointer"
+            title="Delete Folder"
+          >
+            <Trash2 size={13} />
+          </button>
         </div>
       </div>
 
@@ -196,6 +212,7 @@ export const FolderItem = ({
                   onToggleFolder={onToggleFolder}
                   onCreateItem={onCreateItem}
                   onSelectFile={onSelectFile}
+                  onDeleteItem={onDeleteItem}
                   activeFileId={activeFileId}
                 />
               ) : (
@@ -204,6 +221,7 @@ export const FolderItem = ({
                   item={child} 
                   depth={depth + 1}
                   onSelectFile={onSelectFile}
+                  onDeleteItem={onDeleteItem}
                   isActive={activeFileId === child._id}
                 />
               )
@@ -215,19 +233,35 @@ export const FolderItem = ({
   );
 };
 
-// ── FILE ITEM HELPER ──
-export const FileItem = ({ item, depth = 0, onSelectFile, isActive = false }) => (
+// ── FILE ITEM HELPER (WITH HOVER DELETE BUTTON) ──
+export const FileItem = ({ item, depth = 0, onSelectFile, onDeleteItem, isActive = false }) => (
   <div
     style={{ paddingLeft: `${depth * 14 + 22}px` }}
     onClick={() => onSelectFile && onSelectFile(item)}
-    className={`flex items-center gap-1.5 py-1 px-2 cursor-pointer rounded-sm text-xs transition select-none ${
+    className={`group flex items-center justify-between py-1 pr-2 pl-2 cursor-pointer rounded-sm text-xs transition select-none ${
       isActive 
         ? 'bg-[#3b1c66] text-white font-medium shadow-xs' 
         : 'hover:bg-[#261b48] text-[#9f95ba] hover:text-white'
     }`}
   >
-    <FileCode size={13} className="text-yellow-400 shrink-0" />
-    <span className="truncate">{item.name}</span>
+    <div className="flex items-center gap-1.5 min-w-0 flex-1">
+      <FileCode size={13} className="text-yellow-400 shrink-0" />
+      <span className="truncate">{item.name}</span>
+    </div>
+
+    <div className="hidden group-hover:flex items-center gap-1 text-[#8f85a8]">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onDeleteItem && onDeleteItem(item);
+        }}
+        className="p-0.5 hover:text-red-400 hover:bg-red-500/10 rounded transition cursor-pointer"
+        title="Delete File"
+      >
+        <Trash2 size={12} />
+      </button>
+    </div>
   </div>
 );
 
@@ -245,9 +279,47 @@ export const Left = ({ onSelectFile, activeFileId, triggerRootCreate, setTrigger
   const [loadingFolders, setLoadingFolders] = useState({});
   const [isLoadingRoot, setIsLoadingRoot] = useState(true);
 
+  // Delete modal state
+  const [deletingItem, setDeletingItem] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   // Root creation state
   const [rootCreationState, setRootCreationState] = useState(null);
   const [rootInputName, setRootInputName] = useState('');
+
+  // Delete Handler
+  const handleDeleteConfirm = async (item) => {
+    if (!item || isDeleting) return;
+    try {
+      setIsDeleting(true);
+      await deleteFileOrFolder(item._id, accessToken);
+
+      // 1. Remove from rootItems if present
+      setRootItems((prev) => prev.filter((i) => i._id !== item._id));
+
+      // 2. Remove from all childrenMap arrays and delete its key if it was a folder
+      setChildrenMap((prev) => {
+        const next = { ...prev };
+        delete next[item._id];
+        for (const parentId in next) {
+          next[parentId] = next[parentId].filter((i) => i._id !== item._id);
+        }
+        return next;
+      });
+
+      // 3. Clear active selection if the deleted file was currently open
+      if (activeFileId === item._id) {
+        if (onSelectFile) onSelectFile(null);
+      }
+
+      setDeletingItem(null);
+    } catch (err) {
+      console.error("Failed to delete item:", err);
+      alert(err.message || "Failed to delete item");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   // 1. Initial Load & Scoped Project Load
   const [searchParams] = useSearchParams();
@@ -519,6 +591,7 @@ export const Left = ({ onSelectFile, activeFileId, triggerRootCreate, setTrigger
                 onToggleFolder={handleToggleFolder}
                 onCreateItem={handleCreateItem}
                 onSelectFile={onSelectFile}
+                onDeleteItem={setDeletingItem}
                 activeFileId={activeFileId}                     
               />
             ) : (
@@ -527,12 +600,22 @@ export const Left = ({ onSelectFile, activeFileId, triggerRootCreate, setTrigger
                 item={item} 
                 depth={0}
                 onSelectFile={onSelectFile}
+                onDeleteItem={setDeletingItem}
                 isActive={activeFileId === item._id}
               />
             )
           ))
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={Boolean(deletingItem)}
+        item={deletingItem}
+        onClose={() => setDeletingItem(null)}
+        onConfirm={handleDeleteConfirm}
+        isDeleting={isDeleting}
+      />
     </div>
   );
 };

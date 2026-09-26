@@ -191,3 +191,20 @@ export const createFileOrFolder = async ({ name, isFolder, parentId = null, lang
         throw error;
     }
 };
+
+export const deleteFileOrFolder = async (id, token = null) => {
+    try {
+        const url = `${BACKEND_API}/file/${id}`;
+        const res = await authFetch(url, {
+            method: "DELETE"
+        }, token);
+        const data = await res.json();
+        if (!res.ok) {
+            throw new Error(data.message || "Failed to delete item");
+        }
+        return data;
+    } catch (error) {
+        console.error("Error from deleteFileOrFolder:", error);
+        throw error;
+    }
+};

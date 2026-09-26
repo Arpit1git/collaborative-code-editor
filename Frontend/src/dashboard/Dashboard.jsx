@@ -15,10 +15,12 @@ import {
   X, 
   Loader2,
   Calendar,
-  Sparkles
+  Sparkles,
+  Trash2
 } from 'lucide-react';
 import { useAuth } from '../features/auth/Context/AuthContext.jsx';
-import { getRootFilesAndFolders, createFileOrFolder } from '../features/Workspace/api/fileapi.js';
+import { getRootFilesAndFolders, createFileOrFolder, deleteFileOrFolder } from '../features/Workspace/api/fileapi.js';
+import DeleteConfirmModal from './DeleteConfirmModal.jsx';
 
 // Helper to determine language tag
 const getLanguageTag = (name) => {
@@ -69,6 +71,25 @@ export default function Dashboard() {
   const [newItemName, setNewItemName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [createError, setCreateError] = useState(null);
+
+  // Delete Modal State
+  const [deletingItem, setDeletingItem] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDeleteConfirm = async (item) => {
+    if (!item) return;
+    try {
+      setIsDeleting(true);
+      await deleteFileOrFolder(item._id, accessToken);
+      setItems((prev) => prev.filter((i) => i._id !== item._id));
+      setDeletingItem(null);
+    } catch (err) {
+      console.error("Failed to delete item:", err);
+      alert(err.message || "Failed to delete item");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const currentUserId = user?._id || user?.userId || user?.id;
   const currentUserName = user?.userName || user?.name || user?.email?.split('@')[0] || 'Developer';
@@ -453,16 +474,32 @@ export default function Dashboard() {
                     )}
                   </div>
 
-                  {/* Bottom: Date & Launch Action */}
+                  {/* Bottom: Date & Launch Action & Delete */}
                   <div className="flex items-center justify-between border-t border-[#22163f] pt-3 text-[11px] text-[#7d7398]">
                     <div className="flex items-center gap-1.5">
                       <Calendar size={12} />
                       <span>{formatDate(item.createdAt)}</span>
                     </div>
 
-                    <div className="flex items-center gap-1 text-purple-400 group-hover:text-purple-300 font-medium transition group-hover:translate-x-0.5 duration-150">
-                      <span>Launch IDE</span>
-                      <ArrowRight size={13} />
+                    <div className="flex items-center gap-2">
+                      {isOwner && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeletingItem(item);
+                          }}
+                          className="p-1 rounded-lg text-[#74698f] hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition cursor-pointer"
+                          title={`Delete ${isFolder ? 'Folder' : 'File'}`}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+
+                      <div className="flex items-center gap-1 text-purple-400 group-hover:text-purple-300 font-medium transition group-hover:translate-x-0.5 duration-150">
+                        <span>Launch IDE</span>
+                        <ArrowRight size={13} />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -562,6 +599,15 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* 6. DELETE CONFIRMATION MODAL */}
+      <DeleteConfirmModal 
+        isOpen={Boolean(deletingItem)}
+        item={deletingItem}
+        onClose={() => setDeletingItem(null)}
+        onConfirm={handleDeleteConfirm}
+        isDeleting={isDeleting}
+      />
     </div>
   );
 }

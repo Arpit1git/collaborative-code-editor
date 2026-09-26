@@ -247,6 +247,75 @@ export const SearchFile = async(req,res)=>{
     }
 }
 
+/**
+ * @name: DeleteFileOrFolder
+ * @description: Deletes a file or folder (and all recursive children/descendants).
+ * @access: private (Owner or authorized project collaborator)
+ */
+export const DeleteFileOrFolder = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { userId } = req.user;
+
+        if (!id) {
+            return res.status(400).json({ success: false, message: "Item ID is required" });
+        }
+
+        const target = await File.findById(id);
+        if (!target) {
+            return res.status(404).json({ success: false, message: "File or Folder not found" });
+        }
+
+        // Security check: Must be owner of the item or owner/collaborator of root
+        const isOwner = target.owner?.toString() === userId.toString();
+        const isCollab = (target.collaborators || []).some(c => c?.toString() === userId.toString()) ||
+                         (target.collabration || []).some(c => c?.toString() === userId.toString());
+
+        if (!isOwner && !isCollab) {
+            return res.status(403).json({ success: false, message: "Unauthorized: You do not have permission to delete this item." });
+        }
+
+        const deletedIds = [target._id];
+
+        if (target.isFolder) {
+            // Recursively collect all descendant IDs
+            const collectDescendants = async (folderId) => {
+                const children = await File.find({ parentId: folderId });
+                for (const child of children) {
+                    deletedIds.push(child._id);
+                    if (child.isFolder) {
+                        await collectDescendants(child._id);
+                    }
+                }
+            };
+
+            await collectDescendants(target._id);
+
+            // Delete all collected items plus any item having rootId === target._id
+            await File.deleteMany({
+                $or: [
+                    { _id: { $in: deletedIds } },
+                    { rootId: target._id }
+                ]
+            });
+        } else {
+            // Delete single file
+            await File.findByIdAndDelete(target._id);
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: `${target.isFolder ? "Folder" : "File"} "${target.name}" deleted successfully`,
+            deletedId: target._id,
+            deletedIds
+        });
+
+    } catch (error) {
+        console.error("Error in DeleteFileOrFolder:", error);
+        return res.status(500).json({ success: false, message: error.message || "Failed to delete item" });
+    }
+};
+
 
 
  
